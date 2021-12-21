@@ -1,0 +1,58 @@
+# Day 21
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+example = [4, 8]
+input1 = [7, 5]
+
+input =
+  input1
+  |> Enum.with_index()
+  |> Enum.map(fn {p, n} -> {n, p - 1, 0} end)
+```
+
+## Part 1
+
+```elixir
+defmodule Game do
+  def next_rolls({_, n}) do
+    n = n + 3
+
+    case rem(n, 100) do
+      0 -> 98 + 99 + 100
+      1 -> 99 + 100 + 1
+      2 -> 100 + 1 + 2
+      nm -> (nm - 1) * 3
+    end
+    |> then(&{&1, n})
+  end
+end
+
+Stream.iterate({0, 0}, &Game.next_rolls/1)
+|> Stream.drop(1)
+|> Enum.reduce_while(input, fn
+  # {_,roll_index},acc when roll_index > 300 -> {:halt, acc}
+  {_, roll_index}, [p2, {pn, ppos, pscore} = p1] when pscore >= 1000 ->
+    {:halt, {roll_index, {p1, p2}}}
+
+  {roll, _roll_index}, [{pn, ppos, pscore}, op] ->
+    nextpos = rem(ppos + roll, 10)
+    {:cont, [op, {pn, nextpos, pscore + nextpos + 1}]}
+end)
+|> IO.inspect()
+|> then(fn {roll_index, {_, {_, _, score}}} -> score * (roll_index - 3) end)
+```
+
+## Part 2
+
+```elixir
+rem(199, 100)
+```
