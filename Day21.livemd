@@ -14,7 +14,7 @@ example = [4, 8]
 input1 = [7, 5]
 
 input =
-  input1
+  example
   |> Enum.with_index()
   |> Enum.map(fn {p, n} -> {n, p - 1, 0} end)
 ```
@@ -40,7 +40,7 @@ Stream.iterate({0, 0}, &Game.next_rolls/1)
 |> Stream.drop(1)
 |> Enum.reduce_while(input, fn
   # {_,roll_index},acc when roll_index > 300 -> {:halt, acc}
-  {_, roll_index}, [p2, {pn, ppos, pscore} = p1] when pscore >= 1000 ->
+  {_, roll_index}, [p2, {_pn, _ppos, pscore} = p1] when pscore >= 1000 ->
     {:halt, {roll_index, {p1, p2}}}
 
   {roll, _roll_index}, [{pn, ppos, pscore}, op] ->
@@ -54,5 +54,53 @@ end)
 ## Part 2
 
 ```elixir
-rem(199, 100)
+defmodule Dirac do
+  def play([pos0, pos1], win), do: play([{pos0 - 1, 0, 0}, {pos1 - 1, 0, 1}], win, %{})
+
+  defp play([{pos_a, score_a, n_a}, op], win, win_map) do
+    # dice results and times
+    [{3, 1}, {4, 3}, {5, 6}, {6, 7}, {7, 6}, {8, 3}, {9, 1}]
+    |> Enum.reduce({{0, 0}, win_map}, fn
+      {eyes, times}, {win_counts, win_map} ->
+        new_pos_a = rem(pos_a + eyes, 10)
+        new_score_a = score_a + new_pos_a + 1
+
+        if new_score_a >= win do
+          {{0} |> Tuple.insert_at(n_a, 1), win_map}
+        else
+          arg1 = [op, {new_pos_a, new_score_a, n_a}]
+
+          case win_map[arg1] do
+            nil ->
+              {result, win_map} = play([op, {new_pos_a, new_score_a, n_a}], win, win_map)
+              #              |> IO.inspect()
+              {result, Map.put(win_map, arg1, result)}
+
+            result ->
+              {result, win_map}
+          end
+        end
+        |> then(fn {these_win_counts, win_map} ->
+          {tadd(win_counts, tsmul(these_win_counts, times)), win_map}
+        end)
+    end)
+  end
+
+  defp tadd({a1, a2}, {b1, b2}), do: {a1 + b1, a2 + b2}
+  defp tsmul({a1, a2}, p), do: {a1 * p, a2 * p}
+end
+
+Dirac.play([7, 5], 21)
+Dirac.play([4, 8], 21)
+```
+
+```elixir
+for a <- 1..3, b <- 1..3, c <- 1..3 do
+  a + b + c
+end
+|> Enum.frequencies()
+|> Enum.sort()
+|> IO.inspect(label: "Turn")
+
+{0, 1} |> Tuple.insert_at(1, 2)
 ```
