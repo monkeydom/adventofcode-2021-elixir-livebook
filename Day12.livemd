@@ -1,0 +1,129 @@
+# Day 12
+
+## Section
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.2"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input")
+```
+
+```elixir
+stuff =
+  input
+  |> Kino.Input.read()
+
+lines = stuff |> String.split("\n", trim: true)
+```
+
+## Module
+
+```elixir
+defmodule Cave do
+  def cave_map(lines) do
+    lines
+    |> Enum.flat_map(fn line ->
+      parts =
+        String.split(line, "-")
+        |> Enum.map(fn
+          "start" ->
+            :start
+
+          "end" ->
+            :end
+
+          cave ->
+            if cave == String.downcase(cave) do
+              String.to_atom(cave)
+            else
+              cave
+            end
+        end)
+
+      for a <- parts, b <- Enum.reverse(parts), a != b, b != :start, do: {a, b}
+    end)
+    |> Enum.reduce(%{}, fn {a, b}, acc ->
+      Map.update(acc, a, [b], fn dest -> [b | dest] end)
+    end)
+  end
+
+  def all_paths(cavemap) do
+    all_paths(cavemap, [:start], [])
+  end
+
+  defp all_paths(_cavemap, [:end | _] = current_path, result_list),
+    do: [Enum.reverse(current_path) | result_list]
+
+  defp all_paths(cavemap, [h | _] = current_path, result_list) do
+    cavemap[h]
+    |> Enum.reduce(result_list, fn next, acc ->
+      case next do
+        next when is_binary(next) ->
+          all_paths(cavemap, [next | current_path], acc)
+
+        next ->
+          if next in current_path do
+            acc
+          else
+            all_paths(cavemap, [next | current_path], acc)
+          end
+      end
+    end)
+  end
+
+  def all_paths2(cavemap) do
+    all_paths2(cavemap, [:start], [])
+  end
+
+  defp all_paths2(_cavemap, [:end | _] = current_path, result_list),
+    do: [Enum.reverse(current_path) | result_list]
+
+  defp all_paths2(cavemap, [h | _] = current_path, result_list) do
+    cavemap[h]
+    |> Enum.reduce(result_list, fn next, acc ->
+      case next do
+        next when is_binary(next) ->
+          all_paths2(cavemap, [next | current_path], acc)
+
+        next ->
+          if next in current_path do
+            if :SC2 in current_path do
+              acc
+            else
+              all_paths2(cavemap, [next, :SC2 | current_path], acc)
+            end
+          else
+            all_paths2(cavemap, [next | current_path], acc)
+          end
+      end
+    end)
+  end
+end
+```
+
+## Part 1
+
+```elixir
+cavemap =
+  lines
+  |> Cave.cave_map()
+  |> Cave.all_paths()
+  |> Enum.count()
+```
+
+## Part 2
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+cavemap =
+  lines
+  |> Cave.cave_map()
+  |> Cave.all_paths2()
+  |> Enum.count()
+```

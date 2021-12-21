@@ -1,0 +1,468 @@
+# Day 19
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"},
+  {:matrix, "~> 0.3"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+```elixir
+scanners =
+  Kino.Input.read(input)
+  |> case do
+    #    "" -> example
+    input -> input
+  end
+  |> String.split("\n\n", trim: true)
+  |> Enum.map(fn line ->
+    line
+    |> String.split("\n", trim: true)
+    |> Enum.drop(1)
+    |> Enum.map(&(Code.eval_string(<<"{", &1::binary, "}">>) |> elem(0)))
+  end)
+```
+
+## Part 1
+
+```elixir
+defmodule Scanners do
+  # idea for normlization
+  # orient yourself so z is the biggest value and positive
+  # rotate yourself along z so x and y are positive too 
+  # (e.g. the point is in your upper right quadrant)
+  def normalized_pairs({{ax, ay, az}, {bx, by, bz}}) do
+    {bx - ax, by - ay, bz - az}
+  end
+
+  def normalized_pair({{ax, ay, az}, {bx, by, bz}}) do
+    {x, y, z} = {bx - ax, by - ay, bz - az}
+    normalized_point({x, y, z})
+  end
+
+  def normalized_point({x, y, z}) do
+    # allowed transforms to swap
+    # {-z, y,  x} turn right
+    # { x, z, -y} turn down
+    {x, y, z} =
+      if abs(x) > abs(z) do
+        {-z, y, x}
+      else
+        {x, y, z}
+      end
+
+    {x, y, z} =
+      if abs(y) > abs(z) do
+        {x, z, -y}
+      else
+        {x, y, z}
+      end
+
+    {x, y, z} =
+      if z < 0 do
+        {-x, y, -z}
+      else
+        {x, y, z}
+      end
+
+    # now rotate along the viewing axis
+    case {x, y, z} do
+      # rotate to positive when z is positive
+      {x, y, z} when x < 0 and y < 0 -> {-x, -y, z}
+      {x, y, z} when x < 0 -> {y, -x, z}
+      {x, y, z} when y < 0 -> {-y, x, z}
+      p -> p
+    end
+  end
+
+  def all_orientations({x, y, z}) do
+    [
+      {x, y, z},
+      {x, z, -y},
+      {x, -y, -z},
+      {x, -z, y},
+      {-z, y, x},
+      {z, y, -x}
+    ]
+    |> Enum.flat_map(fn {x, y, z} ->
+      [
+        {x, y, z},
+        {-x, -y, z},
+        {-y, x, z},
+        {y, -x, z}
+      ]
+    end)
+  end
+
+  def mult({x, y, z}, [[a1, a2, a3], [b1, b2, b3], [c1, c2, c3]]) do
+    {x * a1 + y * a2 + z * a3, x * b1 + y * b2 + z * b3, x * c1 + y * c2 + z * c3}
+  end
+
+  def neg(vec) do
+    Tuple.to_list(vec)
+    |> Enum.map(&(-&1))
+    |> List.to_tuple()
+  end
+
+  def all_orientations_mx(vec) do
+    id = Matrix.ident(3)
+    rotate_z = [[0, 1, 0], [-1, 0, 0], [0, 0, 1]]
+    rotate_x = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
+    rotate_y = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]
+    rotate_ny = Matrix.mult(Matrix.mult(rotate_y, rotate_y), rotate_y)
+
+    [
+      {Scanners.mult(vec, rotate_y), rotate_y},
+      {Scanners.mult(vec, rotate_ny), rotate_ny}
+      | 1..3
+        |> Enum.reduce([{vec, id}], fn _, [{vec, matrix} | _] = acc ->
+          [{Scanners.mult(vec, rotate_z), Matrix.mult(rotate_z, matrix)} | acc]
+        end)
+    ]
+    |> Enum.flat_map(fn {vec, matrix} ->
+      1..3
+      |> Enum.reduce([{vec, matrix}], fn _, [{vec, matrix} | _] = acc ->
+        [{Scanners.mult(vec, rotate_x), Matrix.mult(rotate_x, matrix)} | acc]
+      end)
+    end)
+  end
+end
+
+scanners_plus =
+  scanners
+  |> Enum.map(fn beacons ->
+    #          {b, bn} <- Enum.with_index(Enum.drop(beacons, an + 1), an + 1) 
+    normalized_pairs =
+      for {a, an} <- Enum.with_index(beacons),
+          {b, bn} <- Enum.with_index(beacons),
+          a != b do
+        {{an, bn}, Scanners.normalized_pair({a, b})}
+      end
+
+    {beacons, normalized_pairs}
+  end)
+
+corr_list1 =
+  for {{_beacons, pairs}, sn} <- Enum.with_index(scanners_plus),
+      {index_pair, normalized} <- pairs do
+    {normalized, {sn, index_pair}}
+  end
+  |> Enum.sort()
+  |> Enum.chunk_by(fn {n, _} -> n end)
+  |> Enum.filter(&(length(&1) > 1))
+  #  |> IO.inspect(label: "step")
+  |> Enum.map(fn list ->
+    list
+    |> Enum.map(fn {_, r} -> r end)
+    |> Enum.sort(:desc)
+    |> Enum.reduce(
+      {[], []},
+      fn
+        {sn, _} = el, {[sn | acc1], acc2} ->
+          {[sn | acc1], acc2}
+
+        {sn, _} = el, {acc1, acc2} ->
+          {[sn | acc1], [el | acc2]}
+      end
+    )
+  end)
+  |> Enum.flat_map(fn
+    # remove empty or single entries
+    {sn_list, _point_list} when length(sn_list) < 2 ->
+      []
+
+    # explode big matches
+    {sn_list, point_list} when length(sn_list) > 2 ->
+      for {a, ia} <- Enum.with_index(sn_list),
+          {b, ib} <- Enum.with_index(sn_list),
+          b > a do
+        {[a, b], [Enum.at(point_list, ia), Enum.at(point_list, ib)]}
+      end
+
+      []
+
+    # take the pairs
+    e ->
+      [e]
+  end)
+  |> Enum.sort()
+  |> IO.inspect(label: "Sorted")
+
+corr_list =
+  corr_list1
+  |> Enum.chunk_by(&elem(&1, 0))
+  |> IO.inspect(label: "Chunked")
+  |> Enum.map(fn list ->
+    list
+    |> Enum.flat_map(fn {_, reflist} ->
+      reflist
+      #      |> IO.inspect(label: "reflist")
+      |> Enum.reduce({[], []}, fn {_sn, {a, b}}, {acc1, acc2} -> {[a | acc1], [b | acc2]} end)
+      |> then(fn {l1, l2} ->
+        [List.to_tuple(Enum.reverse(l1)), List.to_tuple(Enum.reverse(l2))]
+      end)
+    end)
+    #    |> IO.inspect(label: "tuplerone")
+    |> Enum.frequencies()
+    |> Enum.sort_by(&elem(&1, 1), :desc)
+    |> Enum.take(8)
+    |> then(fn acc -> {{:scanners, elem(hd(list), 0)}, acc} end)
+  end)
+  |> Enum.sort_by(fn {{:scanners, list}, pairs} -> {length(list), 100 - length(pairs), list} end)
+  |> IO.inspect(label: "corr_list")
+
+#  |> Enum.filter(fn {{:scanners, [a, b | tail]}, _} -> a != b and tail == [] end)
+
+# hd(corr_list) |> IO.inspect(label: "corr_list")
+
+scan_map =
+  corr_list
+  |> Enum.map(fn {{:scanners, [a_sn, b_sn]}, pointlist} ->
+    a_list = Enum.at(scanners, a_sn)
+    b_list = Enum.at(scanners, b_sn)
+
+    # IO.inspect(pointlist)
+
+    pointlist
+    |> Enum.map(fn {{an, bn}, _} -> {Enum.at(a_list, an), Enum.at(b_list, bn)} end)
+    |> Enum.map(fn {{a_x, a_y, a_z}, b} ->
+      Scanners.all_orientations_mx(b)
+      |> Enum.reduce([], fn
+        {{b_x, b_y, b_z}, matrix}, acc -> [{{a_x - b_x, a_y - b_y, a_z - b_z}, matrix} | acc]
+      end)
+      |> Enum.sort()
+    end)
+    |> Enum.flat_map(& &1)
+    |> Enum.sort()
+    #    |> IO.inspect(label: "flatmapped options")
+    |> Enum.chunk_by(& &1)
+    #    |> Enum.filter(&(length(&1) > 1))
+    |> Enum.flat_map(& &1)
+    |> Enum.uniq()
+    |> hd()
+    |> then(&{:map, {a_sn, b_sn}, &1})
+    |> IO.inspect()
+  end)
+
+scanner_map =
+  scanners
+  |> Enum.with_index()
+  |> Enum.reduce(%{}, fn {v, i}, map -> Map.put(map, i, v) end)
+
+# order and execute the mappings
+ordered_scan_map =
+  scan_map
+  |> Enum.map(fn
+    {:map, {a, b}, {vec, matrix}} when a < b ->
+      {:map, {b, a}, {Scanners.neg(vec), Matrix.transpose(matrix)}}
+
+    e ->
+      e
+  end)
+  |> Enum.sort_by(fn {:map, map, _} -> map end, :desc)
+  |> IO.inspect(label: "transforms")
+  |> Enum.reverse()
+  |> Enum.reduce({[], MapSet.new()}, fn {:map, {a, b}, {vec, matrix}} = e, {acc, mapset} ->
+    if a in mapset do
+      {[{:map, {b, a}, {Scanners.neg(vec), Matrix.transpose(matrix)}} | acc],
+       MapSet.put(mapset, b)}
+    else
+      {[e | acc], MapSet.put(mapset, a)}
+    end
+  end)
+  |> IO.inspect()
+  |> elem(0)
+
+ordered_scan_map
+|> Enum.reduce(scanner_map, fn {:map, {a, b}, {{o_x, o_y, o_z}, matrix}}, map ->
+  case map[a] do
+    nil ->
+      map
+
+    pointlist ->
+      map = Map.delete(map, a)
+
+      pointlist
+      |> tap(&IO.inspect(length(&1) + length(map[b]), label: "PointCount Before"))
+      # |> IO.inspect(label: "Pointlist")
+      |> Enum.map(fn vec -> Scanners.mult(vec, matrix) end)
+      |> Enum.map(fn {x, y, z} -> {x - o_x, y - o_y, z - o_z} end)
+      |> then(fn list ->
+        Map.put(
+          map,
+          b,
+          Enum.sort(map[b] ++ list)
+          |> Enum.uniq()
+          |> tap(&IO.inspect(length(&1), label: "PointCount After"))
+        )
+      end)
+  end
+end)
+|> Map.values()
+|> hd()
+|> Enum.sort()
+|> Enum.count()
+
+# nine = Enum.at(Enum.at(scanners, 0), 9)
+# zero = Enum.at(Enum.at(scanners, 1), 0)
+# {:map, {a, b}, {{o_x, o_y, o_z}, matrix}} = :lists.last(ordered_scan_map)
+# {x,y,z} = Scanners.mult(zero,matrix)
+# {zero, {x,y,z}, {x - o_x,y - o_y, z - o_z},nine}
+
+# beacon distance
+
+# |> Enum.filter(&(length(&1) > 11))
+# |> Enum.count()
+
+# Scanners.all_orientations({1,2,3}) |> Enum.uniq() |> Enum.count()
+
+# {scanner0, pairs0} = hd(scanners_plus)
+# scanner0 |> Enum.at(9) |> IO.inspect(label: "0[9]: ")
+# pairs0 |> Enum.filter(fn {{a,b},_} -> a == 9 or b == 9 end)
+```
+
+```elixir
+corr_list
+```
+
+## Part 2
+
+```elixir
+list_a =
+  """
+  -618,-824,-621
+  -537,-823,-458
+  -447,-329,318
+  404,-588,-901
+  544,-627,-890
+  528,-643,409
+  -661,-816,-575
+  390,-675,-793
+  423,-701,434
+  -345,-311,381
+  459,-707,401
+  -485,-357,347
+  """
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    Code.eval_string(<<"{", line::binary, "}">>) |> elem(0)
+  end)
+
+list_b =
+  """
+  -686,422,578
+  605,423,415
+  515,917,-361
+  -336,658,858
+  -476,619,847
+  -460,603,-452
+  729,430,532
+  -322,571,750
+  -355,545,-477
+  413,935,-424
+  -391,539,-444
+  553,889,-390
+  """
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    Code.eval_string(<<"{", line::binary, "}">>) |> elem(0)
+  end)
+
+Enum.zip(list_a, list_b)
+|> Enum.map(fn {{a_x, a_y, a_z}, b} ->
+  Scanners.all_orientations(b)
+  |> Enum.reduce([], fn
+    {b_x, b_y, b_z}, acc -> [{b_x - a_x, b_y - a_y, b_z - a_z} | acc]
+  end)
+  |> Enum.sort()
+end)
+|> Enum.flat_map(& &1)
+|> Enum.sort()
+|> Enum.chunk_by(& &1)
+|> Enum.filter(&(length(&1) > 1))
+```
+
+```elixir
+scanners_plus
+|> Enum.map(fn {_, cl} -> cl end)
+|> Enum.map(fn list ->
+  list
+  |> Enum.filter(fn {{a, b}, _} -> a in [9, 4, 0, 1] and b in [9, 4, 0, 1] end)
+end)
+
+# corr_list1
+```
+
+```elixir
+all_variants = Scanners.all_orientations({1, 2, 3})
+
+normalized =
+  all_variants
+  |> Enum.map(&Scanners.normalized_point/1)
+  |> Enum.uniq()
+
+id = Matrix.ident(3)
+rotate_z = [[0, 1, 0], [-1, 0, 0], [0, 0, 1]]
+rotate_x = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
+rotate_y = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]
+rotate_ny = Matrix.mult(Matrix.mult(rotate_y, rotate_y), rotate_y)
+
+all_variants_mx =
+  [
+    {Scanners.mult({1, 2, 3}, rotate_y), rotate_y},
+    {Scanners.mult({1, 2, 3}, rotate_ny), rotate_ny}
+    | 1..3
+      |> Enum.reduce([{{1, 2, 3}, id}], fn _, [{vec, matrix} | _] = acc ->
+        [{Scanners.mult(vec, rotate_z), Matrix.mult(rotate_z, matrix)} | acc]
+      end)
+  ]
+  |> Enum.flat_map(fn {vec, matrix} ->
+    1..3
+    |> Enum.reduce([{vec, matrix}], fn _, [{vec, matrix} | _] = acc ->
+      [{Scanners.mult(vec, rotate_x), Matrix.mult(rotate_x, matrix)} | acc]
+    end)
+  end)
+
+all_variants -- Enum.map(all_variants_mx, &elem(&1, 0))
+
+all_variants_mx
+|> Enum.map(fn {vec, matrix} ->
+  {vec, Scanners.mult({1, 2, 3}, matrix), Scanners.mult(vec, Matrix.transpose(matrix)), matrix}
+end)
+
+# Scanners.all_orientations_mx({1,2,3})
+# Matrix.mult(id, rotate_z)
+# {1,2,3}
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+
+# normalized -- all_variants
+
+# test = [[0, 1, 0], [1, 0, 0], [0, 0, -1]]
+# # Matrix.transpose(test) == test
+```
+
+```elixir
+[{[1, 2, 3, 4], [:a, :b, :c, :d]}]
+|> Enum.flat_map(fn {sn_list, pointlist} ->
+  for {a, ia} <- Enum.with_index(sn_list),
+      {b, ib} <- Enum.with_index(sn_list),
+      b > a do
+    {[a, b], [Enum.at(pointlist, ia), Enum.at(pointlist, ib)]}
+  end
+end)
+```

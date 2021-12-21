@@ -1,0 +1,125 @@
+# Day 13
+
+## Input
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+```elixir
+example = """
+6,10
+0,14
+9,10
+0,3
+10,4
+4,11
+6,0
+6,12
+4,1
+0,13
+10,12
+3,4
+3,0
+8,4
+1,10
+2,14
+8,10
+9,0
+
+fold along y=7
+fold along x=5
+"""
+
+input = Kino.Input.read(input)
+
+input = example
+```
+
+```elixir
+[points, folds] = input |> String.split("\n\n", trim: true)
+
+points =
+  points
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn pair ->
+    String.split(pair, ",") |> Enum.map(&String.to_integer/1) |> List.to_tuple()
+  end)
+  |> Enum.into(MapSet.new())
+
+folds =
+  folds
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn
+    "fold along y=" <> num -> {:y, String.to_integer(num)}
+    "fold along x=" <> num -> {:x, String.to_integer(num)}
+  end)
+```
+
+## Module
+
+```elixir
+defmodule Fold do
+  def fold([], acc), do: acc
+  def fold([head | tail], acc), do: fold(tail, fold(head, acc))
+
+  def fold({:y, fold}, acc) do
+    acc
+    |> Enum.map(fn
+      {x, y} when y > fold -> {x, fold - (y - fold)}
+      p -> p
+    end)
+    |> Enum.into(MapSet.new())
+  end
+
+  def fold({:x, fold}, acc) do
+    acc
+    |> Enum.map(fn
+      {x, y} when x > fold -> {fold - (x - fold), y}
+      p -> p
+    end)
+    |> Enum.into(MapSet.new())
+  end
+end
+```
+
+## Part 1
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+folds
+|> Enum.take(1)
+|> Fold.fold(points)
+|> Enum.count()
+|> IO.inspect(label: "Part 1")
+```
+
+## Part 2
+
+```elixir
+folded =
+  folds
+  |> Fold.fold(points)
+
+width = folded |> Enum.map(fn {x, _y} -> x end) |> Enum.max()
+height = folded |> Enum.map(fn {_x, y} -> y end) |> Enum.max()
+
+for y <- 0..height, x <- 0..width do
+  if({x, y} in folded) do
+    ?#
+  else
+    ?.
+  end
+end
+|> Enum.chunk_every(width + 1)
+|> Enum.join("\n")
+|> IO.puts()
+```

@@ -1,0 +1,295 @@
+# Day 14
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+example = """
+NNCB
+
+CH -> B
+HH -> N
+CB -> H
+NH -> C
+HB -> C
+HC -> B
+HN -> C
+NN -> C
+BH -> H
+NC -> B
+NB -> B
+BN -> B
+BB -> N
+BC -> B
+CC -> N
+CN -> C
+"""
+
+input =
+  Kino.Input.read(input)
+  |> case do
+    "" -> example
+    lines -> lines
+  end
+
+[template, rules] =
+  input
+  |> String.split("\n\n", trim: true)
+
+rules =
+  for line <- String.split(rules, "\n", trim: true),
+      <<from::binary-size(2), " -> ", to::binary-size(1)>> = line do
+    {from, to}
+  end
+```
+
+```elixir
+defmodule Polymer do
+  def step(poly, rules) do
+    step(poly, rules, rules, <<>>)
+  end
+
+  defp step(<<last>>, _, _, acc), do: acc <> <<last>>
+
+  defp step(<<a, b, rest::binary>>, [], all_rules, acc) do
+    ## no rule applied
+    step(<<b>> <> rest, all_rules, all_rules, acc <> <<a>>)
+  end
+
+  defp step(<<a, b, rest::binary>>, [{<<a, b>>, <<c>>} | _], all_rules, acc) do
+    step(<<b>> <> rest, all_rules, all_rules, acc <> <<a, c>>)
+  end
+
+  defp step(poly, [_ | rules], all_rules, acc), do: step(poly, rules, all_rules, acc)
+end
+
+# Polymer.step(template, rules)
+# |> Polymer.step(rules)
+# |> Polymer.step(rules)
+# |> Polymer.step(rules)
+# |> Polymer.step(rules)
+# |> byte_size()
+```
+
+## Part 1
+
+```elixir
+freq =
+  for _step <- 1..10, reduce: template do
+    acc -> Polymer.step(acc, rules)
+  end
+  |> String.to_charlist()
+  |> Enum.frequencies()
+  |> Enum.sort(fn {_, a}, {_, b} -> a > b end)
+
+freq
+|> Enum.map(&elem(&1, 1))
+|> (&(hd(&1) - List.last(&1))).()
+```
+
+## Part 2
+
+```elixir
+
+```
+
+```elixir
+template = String.to_charlist(template)
+rules = for {<<a, b>>, <<c>>} <- rules, into: %{}, do: {[a, b], [c]}
+
+defmodule Polymer2 do
+  def step(poly, rules) do
+    step(poly, rules, [])
+  end
+
+  defp step([l], _, acc), do: [l | acc] |> Enum.reverse()
+
+  defp step([a, b | tail], rules, acc) do
+    case rules[[a, b]] do
+      [c] -> step([b | tail], rules, [c, a | acc])
+      _ -> step([b | tail], rules, [a | acc])
+    end
+  end
+
+  def quickrules(rules) do
+    rules
+    |> Enum.map(fn
+      {from, _to} ->
+        {from,
+         1..2
+         |> Enum.reduce(
+           [Polymer2.step(from, rules)],
+           fn _, acc -> [Polymer2.step(hd(acc), rules) | acc] end
+         )
+         |> Enum.reverse()}
+    end)
+    |> Enum.into(Map.new())
+  end
+
+  def frequenciesq(poly, rules, steps) do
+    IO.inspect(poly, label: "Polymer")
+    frequenciesq(%{[List.last(poly)] => 1}, poly, rules, steps)
+  end
+
+  def frequencies(poly, rules, steps) do
+    #    IO.inspect(poly, label: "Polymer")
+    #    frequencies(%{[List.last(poly)] => 1}, poly, rules, steps)
+    #    IO.inspect(quickrules(rules))
+    frequenciess(poly, rules, steps)
+    #    frequencies(%{[List.last(poly)] => 1}, poly, rules, steps)
+  end
+
+  def frequenciess(poly, rules, steps) do
+    IO.inspect(poly, label: "Polymer")
+    frequencies(%{[List.last(poly)] => 1}, poly, rules, steps)
+  end
+
+  defp frequencies(freq, [], _, 0), do: freq
+  defp frequencies(freq, [_], _, 0), do: freq
+
+  defp frequencies(freq, [h | tail], rules, 0) do
+    Map.update(freq, [h], 1, &(&1 + 1))
+    |> frequencies(tail, rules, 0)
+  end
+
+  defp frequencies(freq, [a, b | tail], rules, steps) do
+    case rules[[a, b]] do
+      [c] -> freq |> frequencies([a, c, b], rules, steps - 1)
+      _ -> freq
+    end
+    |> frequencies([b | tail], rules, steps)
+  end
+
+  defp frequencies(freq, [_last], _rules, _steps), do: freq
+
+  defp frequenciesq(freq, [], _, 0), do: freq
+  defp frequenciesq(freq, [_], _, 0), do: freq
+
+  defp frequenciesq(freq, [h | tail], rules, 0) do
+    Map.update(freq, [h], 1, &(&1 + 1))
+    |> frequenciesq(tail, rules, 0)
+  end
+
+  defp frequenciesq(freq, [a, b | tail], rules, steps) do
+    case rules[[a, b]] do
+      nil ->
+        freq
+
+      resultlist ->
+        steps_to_take = min(steps, length(resultlist))
+
+        freq
+        |> frequenciesq(Enum.at(resultlist, steps_to_take - 1), rules, steps - steps_to_take)
+    end
+    |> frequenciesq([b | tail], rules, steps)
+  end
+
+  defp frequenciesq(freq, [_last], _rules, _steps), do: freq
+end
+
+qrules = Polymer2.quickrules(rules)
+
+test = template
+steps = 10
+
+correct =
+  for _step <- 1..steps, reduce: test do
+    acc -> Polymer2.step(acc, rules)
+  end
+  |> IO.inspect(label: "expanded")
+  |> Enum.frequencies()
+  |> Enum.map(fn {a, b} -> {[a], b} end)
+  |> Enum.sort()
+
+[Polymer2.frequencies(test, rules, steps) |> Enum.sort(), correct]
+|> Enum.zip()
+|> Enum.reject(fn {a, b} -> a == b end)
+```
+
+```elixir
+test = 'NBBN'
+steps = 2
+
+for _step <- 1..steps, reduce: test do
+  acc -> IO.inspect(Polymer2.step(acc, rules))
+end
+```
+
+```elixir
+freq =
+  Polymer2.frequenciesq(template, qrules, 10)
+  |> Enum.sort(fn {_, a}, {_, b} -> a > b end)
+
+freq
+|> IO.inspect(label: "Frequencies")
+|> Enum.map(&elem(&1, 1))
+|> that(&(hd(&1) - List.last(&1)))
+```
+
+```elixir
+countrules = for {[a, b], [c]} <- rules, into: %{}, do: {[a, b], [[a, c], [c, b]]}
+
+defmodule PolymerCount do
+  def to_map(charlist), do: Enum.chunk_every(charlist, 2, 1, :discard) |> add_to_map(%{})
+
+  defp add_to_map(pairlist, map, count \\ 1) do
+    Enum.reduce(pairlist, map, fn pair, map ->
+      Map.update(map, pair, count, &(&1 + count))
+    end)
+  end
+
+  def step(polymap, rules) do
+    polymap
+    |> Enum.reduce(%{}, fn {pair, count}, map ->
+      add_to_map(rules[pair], map, count)
+    end)
+  end
+
+  def steps(polymap, _rules, 0), do: polymap
+  def steps(polymap, rules, n), do: steps(step(polymap, rules), rules, n - 1)
+
+  def frequency(polymap, map \\ %{}) do
+    polymap
+    |> Enum.reduce(map, fn {[a, _b], count}, map -> Map.update(map, [a], count, &(&1 + count)) end)
+  end
+end
+
+template
+|> Polymer2.step(rules)
+|> IO.inspect()
+|> PolymerCount.to_map()
+|> IO.inspect()
+|> PolymerCount.frequency(%{[List.last(template)] => 1})
+|> Enum.sort()
+|> IO.inspect()
+
+IO.inspect(template)
+
+PolymerCount.to_map(template)
+|> IO.inspect()
+|> PolymerCount.steps(countrules, 40)
+|> Enum.sort()
+|> PolymerCount.frequency(%{[List.last(template)] => 1})
+|> Enum.map(fn {_, c} -> c end)
+|> Enum.min_max()
+|> (fn {min, max} -> max - min end).()
+```
+
+```elixir
+f = "foo"
+<<?a, ?b>> <> f
+
+List.last([1, 2, 3])
+```

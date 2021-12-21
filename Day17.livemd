@@ -1,0 +1,294 @@
+# Day 17
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.text("Input:")
+```
+
+```elixir
+example = "target area: x=20..30, y=-10..-5"
+input1 = "target area: x=287..309, y=-76..-48"
+
+input =
+  Kino.Input.read(input)
+  |> case do
+    #  _ -> example
+    "" -> example
+    input -> input
+  end
+  |> String.replace("target area: ", "")
+  |> (&<<"{", &1::binary, "}">>).()
+  |> Code.eval_string()
+  |> (&elem(&1, 0)).()
+
+{tx, ty} = input
+```
+
+```elixir
+defmodule Day17 do
+  def step({{x, y}, {dx, dy}}), do: {{x + dx, y + dy}, v_step({dx, dy})}
+  defp v_step({0, dy}), do: {0, dy - 1}
+  defp v_step({dx, dy}) when dx > 0, do: {dx - 1, dy - 1}
+  defp v_step({dx, dy}), do: {dx - 1, dy - 1}
+
+  def test(iv, {tx, ty}) do
+    Stream.iterate(1, &(&1 + 1))
+    |> Enum.reduce_while({{{0, 0}, iv}, 0}, fn step, {acc, hy} ->
+      next = Day17.step(acc)
+      {{x, y}, {dx, _dy}} = next
+
+      cond do
+        x in tx and y in ty ->
+          {:halt, {:ok, [step: step, iv: iv, hy: hy, state: next]}}
+
+        dx == 0 and x not in tx ->
+          {:halt, {{:failed, :missed_x}, [step: step, iv: iv, hy: hy, state: next]}}
+
+        y < ty.first ->
+          {:halt, {{:failed, :missed_y}, [step: step, iv: iv, hy: hy, state: next]}}
+
+        true ->
+          {:cont, {next, max(hy, y)}}
+      end
+    end)
+  end
+
+  def testx(idx, tx, maxstep \\ 0xFFFFFF) do
+    Stream.iterate(1, &(&1 + 1))
+    |> Enum.reduce_while({0, idx}, fn
+      step, _ when step > maxstep ->
+        {:halt, false}
+
+      step, {x, dx} ->
+        {next, ndx} = {x + dx, elem(v_step({dx, 0}), 0)}
+
+        cond do
+          next in tx ->
+            {:halt, {step, idx, {next, ndx}}}
+
+          ndx == 0 ->
+            {:halt, false}
+
+          next > tx.last ->
+            {:halt, false}
+
+          true ->
+            {:cont, {next, ndx}}
+        end
+    end)
+  end
+
+  def testy(idy, ty, maxstep \\ 0xFFFFFF) do
+    Stream.iterate(1, &(&1 + 1))
+    |> Enum.reduce_while({0, idy}, fn
+      step, _ when step > maxstep ->
+        {:halt, false}
+
+      step, {y, dy} ->
+        {next, ndy} = {y + dy, elem(v_step({0, dy}), 1)}
+
+        cond do
+          next in ty ->
+            {:halt, {step, idy, {next, ndy}}}
+
+          next < ty.first ->
+            {:halt, false}
+
+          true ->
+            {:cont, {next, ndy}}
+        end
+    end)
+  end
+
+  defp append_all_x(acc, tx, {step, idx, {x, dx}}, maxsteps) do
+    if (x + dx) in tx do
+      result = {step + 1, idx, {x + dx, elem(v_step({dx, 0}), 0)}}
+      acc = [result | acc]
+
+      if step < maxsteps do
+        append_all_x(acc, tx, result, maxsteps)
+      else
+        acc
+      end
+    else
+      acc
+    end
+  end
+
+  def all_x(tx, maxsteps) do
+    tx.last..0
+    |> Enum.reduce([], fn idx, acc ->
+      case testx(idx, tx) do
+        false ->
+          acc
+
+        {step, idx, {x, dx}} = result ->
+          acc = [result | acc]
+
+          if (x + dx) in tx and step < maxsteps do
+            IO.inspect({result, maxsteps}, label: "Add More")
+            #            acc
+            append_all_x(acc, tx, {step, idx, {x, dx}}, maxsteps)
+          else
+            acc
+          end
+      end
+    end)
+  end
+
+  defp append_all_y(acc, ty, {step, idy, {y, dy}}) do
+    if (y + dy) in ty do
+      result = {step + 1, idy, {y + dy, elem(v_step({0, dy}), 1)}}
+      acc = [result | acc]
+      append_all_y(acc, ty, result)
+    else
+      acc
+    end
+  end
+
+  def all_y(ty) do
+    Stream.iterate(ty.first, &(&1 + 1))
+    |> Enum.reduce_while([], fn
+      idy, [{_, dy, _} | _] = acc when idy > dy + 100 ->
+        {:halt, acc}
+
+      idy, acc ->
+        case testy(idy, ty) do
+          false ->
+            {:cont, acc}
+
+          {_step, _idy, {y, dy}} = result ->
+            acc = [result | acc]
+
+            if (y + dy) in ty do
+              {:cont, append_all_y(acc, ty, result)}
+            else
+              {:cont, acc}
+            end
+        end
+    end)
+  end
+
+  def solution_range_x(tx) do
+    Stream.iterate(1, &(&1 + 1))
+    |> Enum.reduce_while({0, []}, fn step, {pos, rl} ->
+      next = pos + step
+
+      cond do
+        next > tx.last -> {:halt, rl}
+        next in tx -> {:cont, {next, [step | rl]}}
+        true -> {:cont, {next, rl}}
+      end
+    end)
+  end
+end
+
+IO.inspect({tx, ty}, label: "Target")
+
+iv = {6, 9}
+Day17.test(iv, {tx, ty})
+
+# Day17.solution_range_x(tx)
+
+xrange =
+  Day17.solution_range_x(tx)
+  |> IO.inspect()
+
+xc = hd(xrange)
+
+all_solutions =
+  Stream.iterate(1, &(&1 + 1))
+  |> Enum.reduce_while({[], 0}, fn y, {rl, tries} ->
+    case Day17.test({xc, y}, {tx, ty}) do
+      {:ok, v} ->
+        {:cont, {[v | rl], 100}}
+
+      _ ->
+        case rl do
+          [] ->
+            {:cont, {rl, tries}}
+
+          _ ->
+            if tries > 0 do
+              {:cont, {rl, tries - 1}}
+            else
+              {:halt, rl}
+            end
+        end
+    end
+  end)
+  |> IO.inspect()
+
+all_solutions
+|> hd()
+|> List.keyfind(:hy, 0)
+|> IO.inspect(label: "Part 1")
+
+all_solutions
+|> Enum.count()
+
+Day17.test({287, -76}, {tx, ty})
+
+ally =
+  Day17.all_y(ty)
+  |> IO.inspect(label: "All Y")
+
+maxstepy = ally |> Enum.max_by(&elem(&1, 0)) |> IO.inspect(label: "maxstep y") |> elem(0)
+
+allx =
+  Day17.all_x(tx, maxstepy)
+  |> IO.inspect(label: "All X")
+
+solutions =
+  for {xs, idx, _} <- allx, {ys, idy, _} <- ally, xs == ys do
+    {idx, idy}
+  end
+  |> Enum.uniq()
+
+# |> Enum.filter(fn p -> Day17.test(p, {tx,ty}) |> elem(0) == :ok  end)
+
+solutions
+|> Enum.count()
+```
+
+```elixir
+all_example_solutions =
+  """
+  23,-10  25,-9   27,-5   29,-6   22,-6   21,-7   9,0     27,-7   24,-5
+  25,-7   26,-6   25,-5   6,8     11,-2   20,-5   29,-10  6,3     28,-7
+  8,0     30,-6   29,-8   20,-10  6,7     6,4     6,1     14,-4   21,-6
+  26,-10  7,-1    7,7     8,-1    21,-9   6,2     20,-7   30,-10  14,-3
+  20,-8   13,-2   7,3     28,-8   29,-9   15,-3   22,-5   26,-8   25,-8
+  25,-6   15,-4   9,-2    15,-2   12,-2   28,-9   12,-3   24,-6   23,-7
+  25,-10  7,8     11,-3   26,-7   7,1     23,-9   6,0     22,-10  27,-6
+  8,1     22,-8   13,-4   7,6     28,-6   11,-4   12,-4   26,-9   7,4
+  24,-10  23,-8   30,-8   7,0     9,-1    10,-1   26,-5   22,-9   6,5
+  7,5     23,-6   28,-10  10,-2   11,-1   20,-9   14,-2   29,-7   13,-3
+  23,-5   24,-8   27,-9   30,-7   28,-5   21,-10  7,9     6,6     21,-5
+  27,-10  7,2     30,-9   21,-8   22,-7   24,-9   20,-6   6,9     29,-5
+  8,-2    27,-8   30,-5   24,-7
+  """
+  |> String.split(["\n", " "], trim: true)
+  |> Enum.map(&<<"{", &1::binary, "}">>)
+  |> Enum.join(",")
+  |> then(&Code.eval_string(<<"[", &1::binary, "]">>))
+  |> elem(0)
+  |> Enum.sort()
+
+all_example_solutions -- solutions
+
+# solutions -- all_example_solutions
+
+# Enum.count(all_example_solutions)
+
+# wrong = [{11, -5}, {12, -5}, {13, -5}, {14, -5}, {15, -5}]
+# |> Enum.map(& Day17.test(&1, {tx,ty}))
+```

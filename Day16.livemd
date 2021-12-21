@@ -1,0 +1,160 @@
+# Day 16
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+```elixir
+example = "D2FE28"
+example = "38006F45291200"
+example = "EE00D40C823060"
+example = "8A004A801A8002F478"
+example = "620080001611562C8802118E34"
+example = "C0015000016115A2E0802F182340"
+example = "A0016C880162017C3686B18A3D4780"
+example = "C200B40A82"
+
+input =
+  Kino.Input.read(input)
+  |> case do
+    #    _ -> example
+    "" -> example
+    lines -> lines
+  end
+
+input = Base.decode16!(input)
+```
+
+```elixir
+defmodule Day16 do
+  def parse(bin, limit \\ 0xFFFFFF), do: parse(bin, [], limit)
+  def parse(bin, acc, 0), do: {Enum.reverse(acc), bin}
+  def parse(bin, acc, _limit) when bit_size(bin) < 8, do: Enum.reverse(acc)
+
+  def parse(bin, acc, limit) do
+    {parsed, rest} = header(bin)
+
+    parse(rest, [parsed | acc], limit - 1)
+  end
+
+  def sum_versions(list), do: sum_versions(list, 0)
+  def sum_versions([], acc), do: acc
+  def sum_versions([el | tail], acc), do: sum_versions(tail, sum_versions(el, acc))
+  def sum_versions({{:lit, {ver, _}}, _}, acc), do: acc + ver
+  def sum_versions({{:op, {ver, _}}, oplist}, acc), do: sum_versions(oplist, acc + ver)
+
+  def eval(termlist) when is_list(termlist), do: Enum.map(termlist, &eval/1)
+  def eval({{:lit, {_, _}}, value}), do: value
+  def eval({{:op, {_, 0}}, oplist}), do: eval(oplist) |> Enum.sum()
+  def eval({{:op, {_, 1}}, oplist}), do: eval(oplist) |> Enum.product()
+  def eval({{:op, {_, 2}}, oplist}), do: eval(oplist) |> Enum.min()
+  def eval({{:op, {_, 3}}, oplist}), do: eval(oplist) |> Enum.max()
+
+  def eval({{:op, {_, 5}}, oplist}),
+    do:
+      eval(oplist)
+      |> (fn [a, b | _] ->
+            if a > b do
+              1
+            else
+              0
+            end
+          end).()
+
+  def eval({{:op, {_, 6}}, oplist}),
+    do:
+      eval(oplist)
+      |> (fn [a, b | _] ->
+            if a < b do
+              1
+            else
+              0
+            end
+          end).()
+
+  def eval({{:op, {_, 7}}, oplist}),
+    do:
+      eval(oplist)
+      |> (fn [a, b | _] ->
+            if a == b do
+              1
+            else
+              0
+            end
+          end).()
+
+  def header(<<version::3, type::3, rest::bits>>) do
+    # IO.inspect({version, type}, label: "Version, Type")
+    {header_info, {parsed, rest}} =
+      case {{version, type}, rest} do
+        {{ver, 4}, rest} ->
+          {{:lit, {ver, 4}}, literal(rest)}
+
+        {{ver, op}, rest} ->
+          {{:op, {ver, op}}, operator(rest)}
+      end
+
+    {{header_info, parsed}, rest}
+  end
+
+  def literal(bits), do: literal(bits, 0)
+
+  def literal(<<0::size(1), four::size(4), rest::bits>>, acc), do: {acc * 0x10 + four, rest}
+
+  def literal(<<1::size(1), four::size(4), rest::bits>>, acc),
+    do: literal(rest, acc * 0x10 + four)
+
+  def to_binary(bitstring), do: to_binary(bitstring, [?b, ?0])
+  def to_binary(<<>>, acc), do: Enum.reverse(acc)
+  def to_binary(<<b::1, rest::bits>>, acc), do: to_binary(rest, [b + ?0 | acc])
+
+  def operator(<<1::1, packet_count::11, rest::bits>>) do
+    #    {ops, rest} = 
+    parse(rest, packet_count)
+  end
+
+  def operator(<<0::1, packet_length::15, rest::bits>>) do
+    <<packet_bits::bits-size(packet_length), rest::bits>> = rest
+    #    IO.puts(to_binary(packet_bits))
+    {parse(packet_bits), rest}
+    #    {subpackets(packet_bits), rest}
+  end
+
+  def subpackets(bits), do: subpackets(bits, [])
+  def subpackets(bits, acc) when bit_size(bits) < 5, do: Enum.reverse(acc)
+
+  def subpackets(bits, acc) do
+    {val, rest} = literal(bits)
+    #    |> IO.inspect(label: "value")
+    subpackets(rest, [val | acc])
+  end
+end
+
+parsed = Day16.parse(input)
+
+parsed
+|> IO.inspect()
+|> Day16.sum_versions()
+|> IO.inspect(label: "Part 1")
+
+parsed
+|> Day16.eval()
+|> hd()
+|> IO.inspect(label: "Part 2")
+
+"9C0141080250320F1802104A08"
+|> Base.decode16!()
+|> Day16.parse()
+|> IO.inspect()
+|> Day16.eval()
+|> hd()
+```

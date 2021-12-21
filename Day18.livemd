@@ -1,0 +1,265 @@
+# Day 18
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+```elixir
+example = """
+[1,2]
+[[1,2],3]
+[9,[8,7]]
+[[1,9],[8,5]]
+[[[[1,2],[3,4]],[[5,6],[7,8]]],9]
+[[[9,[3,8]],[[0,9],6]],[[[3,7],[4,9]],3]]
+[[[[1,3],[5,3]],[[1,3],[8,7]]],[[[4,9],[6,9]],[[8,2],[7,3]]]]
+"""
+
+example = """
+[1,1]
+[2,2]
+[3,3]
+[4,4]
+[5,5]
+[6,6]
+"""
+
+lines =
+  Kino.Input.read(input)
+  |> case do
+    #        _ -> example
+    "" -> example
+    input -> input
+  end
+  |> String.split("\n", trim: true)
+```
+
+```elixir
+defmodule Snailfish do
+  def from_string(bin) do
+    bin
+    |> String.to_charlist()
+    |> Enum.chunk_by(fn
+      c when c in [?[, ?], ?,] -> :sep
+      _ -> :num
+    end)
+    |> Enum.map(fn
+      n when is_list(n) and hd(n) in '0123456789' -> List.to_integer(n)
+      sep -> sep
+    end)
+  end
+
+  def to_string(sn) do
+    sn
+    |> Enum.map(fn
+      int when is_integer(int) -> Integer.to_string(int)
+      part -> part
+    end)
+    |> IO.iodata_to_binary()
+  end
+
+  def reduce(sn) when is_binary(sn), do: from_string(sn) |> reduce()
+  def reduce(sn), do: reduce(sn, [], 0)
+
+  defp split_if_needed([sep, num | tail], walked) do
+    if num > 9 do
+      split([sep, num | tail], walked)
+    else
+      split_if_needed(tail, [num, sep | walked])
+    end
+  end
+
+  defp split_if_needed([sep], walked), do: {:reduced, Enum.reverse([sep | walked])}
+
+  defp reduce([sep], walked, _depth), do: split_if_needed(Enum.reverse([sep | walked]), [])
+
+  defp reduce([sep, num | tail], walked, depth) do
+    newdepth =
+      sep
+      |> Enum.reduce(
+        depth,
+        fn
+          ?[, acc -> acc + 1
+          ?], acc -> acc - 1
+          _, acc -> acc
+        end
+      )
+
+    # IO.inspect({depth, sep, newdepth}, label: "depth update")
+    if newdepth > 4 do
+      # IO.inspect({walked, newdepth}, label: "walked")
+      explode([sep, num | tail], walked)
+    else
+      reduce(tail, [num, sep | walked], newdepth)
+    end
+  end
+
+  # both
+  defp explode([sepl, a, ',', b, sepr, r | tail], [l | walked]) do
+    explode_f([tl(sepr), r + b | tail], [0, :lists.droplast(sepl), l + a | walked])
+  end
+
+  # no left
+  defp explode([sepl, _a, ',', b, [?] | seprt], r | tail], []) do
+    explode_f([seprt, b + r | tail], [0, :lists.droplast(sepl)])
+  end
+
+  # no right
+  defp explode([sepl, a, ',', _b, sepr], [l | walked]) do
+    explode_f([], [tl(sepr), 0, :lists.droplast(sepl), l + a | walked])
+  end
+
+  defp explode_f(walk, walked), do: {:exploded, Enum.reverse(walked) ++ walk}
+
+  defp split([sepl, num, sepr | tail], walked) do
+    split_f([sepl ++ '[', floor(num / 2), ',', ceil(num / 2), [?] | sepr] | tail], walked)
+  end
+
+  defp split_f(walk, walked), do: {:split, Enum.reverse(walked) ++ walk}
+
+  def reduce_fully(num) when is_binary(num), do: reduce_fully(from_string(num))
+
+  def reduce_fully(num) do
+    case reduce(num) do
+      {:reduced, result} -> result
+      {_, num} -> reduce_fully(num)
+    end
+  end
+
+  def add([sepal | at], [sepbl | bt]) do
+    [sepal ++ '[' | at]
+    |> Enum.reverse()
+    |> then(fn [separ | abody] ->
+      [sepbr | bbody] = Enum.reverse(bt)
+
+      [sepbr ++ ']' | bbody] ++ [separ ++ ',' ++ sepbl | abody]
+    end)
+    |> Enum.reverse()
+    |> reduce_fully()
+  end
+
+  def magnitude(num), do: magnitude(num, [])
+
+  defp magnitude([sepl, a, ',', b, [?] | seprtail] | tail], walked) do
+    result = a * 3 + b * 2
+
+    case {tail, walked} do
+      {[], []} -> result
+      _ -> magnitude([:lists.droplast(sepl), result, seprtail | tail], walked)
+    end
+  end
+
+  defp magnitude([sep, num | tail], walked), do: magnitude(tail, [num, sep | walked])
+  defp magnitude([sep], walked), do: magnitude(Enum.reverse([sep | walked]))
+end
+
+alias Snailfish, as: SF
+
+SF.magnitude(SF.from_string("[[[[0,7],4],[[7,8],[6,0]]],[8,1]]"))
+SF.magnitude(SF.from_string("[[[[0,7],4],[[7,8],[6,0]]],[8,1]]"))
+SF.magnitude(SF.from_string("[[[[0,7],4],[[7,8],[6,0]]],[8,1]]"))
+SF.magnitude(SF.from_string("[[[[0,7],4],[[7,8],[6,0]]],[8,1]]"))
+SF.magnitude(SF.from_string("[[[[[1,1],[2,2]],[3,3]],[4,4]]"))
+SF.magnitude(SF.from_string("[[[[3,0],[5,3]],[4,4]],[5,5]]"))
+SF.magnitude(SF.from_string("[[[[[8,7],[7,7]],[[8,6],[7,7]]],[[[0,7],[6,6]],[8,7]]]"))
+```
+
+```elixir
+lines
+|> Enum.map(&Snailfish.from_string/1)
+# |> IO.inspect()
+|> Enum.map(&Snailfish.to_string/1)
+
+SF.reduce("[[[[[9,8],1],2],3],4]")
+|> then(&SF.to_string(elem(&1, 1)))
+
+SF.reduce("[7,[6,[5,[4,[3,2]]]]]")
+|> then(&SF.to_string(elem(&1, 1)))
+
+SF.reduce("[[6,[5,[4,[3,2]]]],1]")
+|> then(&SF.to_string(elem(&1, 1)))
+
+SF.reduce("[[3,[2,[1,[7,3]]]],[6,[5,[4,[3,2]]]]]")
+|> then(&SF.to_string(elem(&1, 1)))
+
+SF.reduce("[[3,[2,[8,0]]],[9,[5,[4,[3,2]]]]]")
+|> then(&SF.to_string(elem(&1, 1)))
+
+# SF.reduce_fully("[11,1]")
+# SF.reduce_fully("[[[[[4,3],4],4],[7,[[8,4],9]]],[1,1]]")
+# |> SF.to_string()
+
+# SF.add("[[[[4,3],4],4],[7,[[8,4],9]]]" |> SF.from_string(), "[1,1]" |> SF.from_string())
+# |> SF.to_string()
+
+SF.add(
+  "[[[0,[4,5]],[0,0]],[[[4,5],[2,6]],[9,5]]]" |> SF.from_string(),
+  "[7,[[[3,7],[4,3]],[[6,3],[8,8]]]]" |> SF.from_string()
+)
+|> SF.to_string()
+
+# SF.add(SF.from_string("[1,2]"), SF.from_string("[[[[1,2],2],2],3]")) |> SF.to_string()
+```
+
+```elixir
+# lines = 
+"""
+[[[0,[5,8]],[[1,7],[9,6]]],[[4,[1,2]],[[1,4],2]]]
+[[[5,[2,8]],4],[5,[[9,9],0]]]
+[6,[[[6,2],[5,6]],[[7,6],[4,7]]]]
+[[[6,[0,7]],[0,9]],[4,[9,[9,0]]]]
+[[[7,[6,4]],[3,[1,3]]],[[[5,5],1],9]]
+[[6,[[7,3],[3,2]]],[[[3,8],[5,7]],4]]
+[[[[5,4],[7,7]],8],[[8,3],8]]
+[[9,3],[[9,9],[6,[4,9]]]]
+[[2,[[7,7],7]],[[5,8],[[9,3],[0,2]]]]
+[[[[5,2],5],[8,[3,7]]],[[5,[7,5]],[4,4]]]
+"""
+|> String.split("\n", trim: true)
+
+lines
+# |> IO.inspect()
+|> Enum.map(&SF.from_string/1)
+|> Enum.reduce(fn e, acc ->
+  SF.add(acc, e)
+  #  |> tap(& IO.inspect( SF.to_string(&1), label: "Step")) 
+end)
+|> SF.magnitude()
+```
+
+## Part 2
+
+```elixir
+# lines =
+"""
+[[[0,[5,8]],[[1,7],[9,6]]],[[4,[1,2]],[[1,4],2]]]
+[[[5,[2,8]],4],[5,[[9,9],0]]]
+[6,[[[6,2],[5,6]],[[7,6],[4,7]]]]
+[[[6,[0,7]],[0,9]],[4,[9,[9,0]]]]
+[[[7,[6,4]],[3,[1,3]]],[[[5,5],1],9]]
+[[6,[[7,3],[3,2]]],[[[3,8],[5,7]],4]]
+[[[[5,4],[7,7]],8],[[8,3],8]]
+[[9,3],[[9,9],[6,[4,9]]]]
+[[2,[[7,7],7]],[[5,8],[[9,3],[0,2]]]]
+[[[[5,2],5],[8,[3,7]]],[[5,[7,5]],[4,4]]]
+"""
+|> String.split("\n", trim: true)
+
+numbers =
+  lines
+  # |> IO.inspect()
+  |> Enum.map(&SF.from_string/1)
+
+magnitudes = for x <- numbers, y <- numbers, x != y, do: SF.add(x, y) |> SF.magnitude()
+
+Enum.max(magnitudes)
+```

@@ -1,0 +1,186 @@
+# Day 20
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+```elixir
+example = """
+..#.#..#####.#.#.#.###.##.....###.##.#..###.####..#####..#....#..#..##..##
+#..######.###...####..#..#####..##..#.#####...##.#.#..#.##..#.#......#.###
+.######.###.####...#.##.##..#..#..#####.....#.#....###..#.##......#.....#.
+.#..#..##..#...##.######.####.####.#.#...#.......#..#.#.#...####.##.#.....
+.#..#...##.#.##..#...##.#.##..###.#......#.#.......#.#.#.####.###.##...#..
+...####.#..#..#.##.#....##..#.####....##...##..#...#......#.#.......#.....
+..##..####..#...#.#.#...##..#.#..###..#####........#..####......#..#
+
+#..#.
+#....
+##..#
+..#..
+..###
+"""
+
+input =
+  Kino.Input.read(input)
+  |> case do
+    #     _ -> example
+    "" -> example
+    input -> input
+  end
+  |> String.split("\n\n", trim: true)
+
+lookup =
+  hd(input)
+  |> String.replace("\n", "")
+  |> String.to_charlist()
+  |> Enum.with_index()
+  |> Enum.flat_map(fn
+    {?#, b} -> [b]
+    _ -> []
+  end)
+  |> Enum.into(MapSet.new())
+
+image =
+  Enum.at(input, 1)
+  |> String.split("\n", trim: true)
+  |> Enum.map(&String.to_charlist/1)
+
+dim = {{0, 0}, {length(hd(image)), length(image)}}
+
+image =
+  for {row, y} <- Enum.with_index(image),
+      {value, x} <- Enum.with_index(row),
+      value == ?#,
+      into: MapSet.new() do
+    {x, y}
+  end
+
+# todo: doesn't work for images where the first and last pixel isn't set
+
+IO.inspect(lookup |> Enum.count())
+
+image = {dim, image}
+```
+
+## Part 1
+
+```elixir
+defmodule DotImage do
+  def step({{{min_x, min_y}, {max_x, max_y}}, pixel}, lookup) do
+    gain = 10
+
+    for y <- (min_y - gain)..(max_y + gain),
+        x <- (min_x - gain)..(max_x + gain),
+        reduce: MapSet.new() do
+      mapacc ->
+        for iy <- (y - 1)..(y + 1), ix <- (x - 1)..(x + 1), reduce: [] do
+          acc ->
+            [
+              if {ix, iy} in pixel do
+                1
+              else
+                0
+              end
+              | acc
+            ]
+        end
+        |> Enum.reverse()
+        |> Integer.undigits(2)
+        |> then(
+          &if &1 in lookup do
+            MapSet.put(mapacc, {x, y})
+          else
+            mapacc
+          end
+        )
+    end
+    |> then(&{{{min_x - gain, min_y - gain}, {max_x + gain, max_y + gain}}, &1})
+  end
+
+  def to_string({{{min_x, min_y}, {max_x, max_y}}, pixel}) do
+    for y <- min_y..max_y do
+      for x <- min_x..max_x do
+        if {x, y} in pixel do
+          ?#
+        else
+          ?.
+        end
+      end
+    end
+    |> Enum.join("\n")
+  end
+
+  def inspect(image) do
+    DotImage.to_string(image)
+    |> IO.puts()
+
+    IO.puts("\n")
+
+    image
+  end
+
+  def count({_dim, pixel}) do
+    Enum.count(pixel)
+  end
+
+  def pixel({_dim, pixel}) do
+    pixel
+  end
+
+  def crop({_dim, pixel}, {{min_x, min_y}, {max_x, max_y}}, gain \\ 0) do
+    min_x = min_x - gain
+    min_y = min_y - gain
+    max_x = max_x + gain
+    max_y = max_y + gain
+
+    {
+      {{min_x, min_y}, {max_x, max_y}},
+      pixel
+      |> Enum.filter(fn {x, y} -> x in min_x..max_x and y in min_y..max_y end)
+      |> Enum.into(MapSet.new())
+    }
+  end
+
+  def double_step({dim, _} = image, lookup) do
+    image
+    |> step(lookup)
+    |> step(lookup)
+    |> crop(dim, 2)
+  end
+end
+
+# DotImage.step(image)
+
+image
+|> DotImage.inspect()
+|> DotImage.step(lookup)
+|> DotImage.inspect()
+|> DotImage.step(lookup)
+|> DotImage.crop(elem(image, 0), 2)
+|> DotImage.inspect()
+|> DotImage.count()
+
+1..25
+|> Enum.reduce(image, fn _, image -> DotImage.double_step(image, lookup) end)
+|> DotImage.inspect()
+|> DotImage.count()
+
+# |> DotImage.step(lookup)
+# |> DotImage.inspect()
+```
+
+## Part 2
+
+```elixir
+
+```

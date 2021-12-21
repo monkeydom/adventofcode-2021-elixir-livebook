@@ -1,0 +1,234 @@
+# Day 19 - Second Try
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"},
+  {:matrix, "~> 0.3"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+```elixir
+scanners =
+  Kino.Input.read(input)
+  |> case do
+    #    "" -> example
+    input -> input
+  end
+  |> String.split("\n\n", trim: true)
+  |> Enum.map(fn line ->
+    line
+    |> String.split("\n", trim: true)
+    |> Enum.drop(1)
+    |> Enum.map(&(Code.eval_string(<<"{", &1::binary, "}">>) |> elem(0)))
+  end)
+  |> Enum.with_index()
+  |> Enum.map(fn {pointlist, idx} -> {idx, pointlist} end)
+  |> Enum.into(%{})
+```
+
+## Part 1
+
+```elixir
+defmodule Scanners do
+  def all_orientations(vec) do
+    all_orientations_mx(vec)
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  def mult({x, y, z}, [[a1, a2, a3], [b1, b2, b3], [c1, c2, c3]]) do
+    {x * a1 + y * a2 + z * a3, x * b1 + y * b2 + z * b3, x * c1 + y * c2 + z * c3}
+  end
+
+  def neg(vec) do
+    Tuple.to_list(vec)
+    |> Enum.map(&(-&1))
+    |> List.to_tuple()
+  end
+
+  def quadrance({x, y, z}), do: x * x + y * y + z * z
+  def quadrance({x, y, z}, {x2, y2, z2}), do: quadrance({x2 - x, y2 - y, z2 - z})
+
+  def all_orientations_mx(vec) do
+    id = Matrix.ident(3)
+    rotate_z = [[0, 1, 0], [-1, 0, 0], [0, 0, 1]]
+    rotate_x = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
+    rotate_y = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]
+    rotate_ny = Matrix.mult(Matrix.mult(rotate_y, rotate_y), rotate_y)
+
+    [
+      {Scanners.mult(vec, rotate_y), rotate_y},
+      {Scanners.mult(vec, rotate_ny), rotate_ny}
+      | 1..3
+        |> Enum.reduce([{vec, id}], fn _, [{vec, matrix} | _] = acc ->
+          [{Scanners.mult(vec, rotate_z), Matrix.mult(rotate_z, matrix)} | acc]
+        end)
+    ]
+    |> Enum.flat_map(fn {vec, matrix} ->
+      1..3
+      |> Enum.reduce([{vec, matrix}], fn _, [{vec, matrix} | _] = acc ->
+        [{Scanners.mult(vec, rotate_x), Matrix.mult(rotate_x, matrix)} | acc]
+      end)
+    end)
+  end
+
+  def quad_list_match(lista, listb), do: quad_list_match(lista, listb, [])
+
+  def quad_list_match([{quad, a_elm} | lista], [{quad, b_elm} | listb], acc) do
+    quad_list_match(lista, listb, [{quad, {a_elm, b_elm}} | acc])
+  end
+
+  def quad_list_match([], _, acc), do: acc
+  def quad_list_match(_, [], acc), do: acc
+
+  def quad_list_match([{a_quad, _} | _] = lista, [{b_quad, _} | listb], acc)
+      when b_quad < a_quad do
+    quad_list_match(lista, listb, acc)
+  end
+
+  def quad_list_match([{a_quad, _} | lista], [{b_quad, _} | listb], acc) when b_quad > a_quad do
+    quad_list_match(lista, listb, acc)
+  end
+end
+```
+
+```elixir
+quadrance_map =
+  scanners
+  |> Enum.map(fn {i, l} ->
+    {i,
+     for(
+       {a, ia} <- Enum.with_index(l),
+       {b, ib} <- Enum.with_index(l),
+       ia < ib,
+       do: {Scanners.quadrance(a, b), {ia, ib}}
+     )
+     |> Enum.sort()}
+  end)
+  |> Enum.into(%{})
+
+all_pairings =
+  for a <- Map.keys(scanners), b <- Map.keys(scanners), a < b do
+    {a, b}
+  end
+
+for {a, b} <- all_pairings do
+  {{a, b}, Scanners.quad_list_match(quadrance_map[a], quadrance_map[b])}
+end
+|> Enum.filter(fn {_pair, list} -> length(list) > 11 end)
+|> Enum.map(fn {pair, list} -> {pair, length(list)} end)
+```
+
+## Part 2
+
+```elixir
+list_a =
+  """
+  -618,-824,-621
+  -537,-823,-458
+  -447,-329,318
+  404,-588,-901
+  544,-627,-890
+  528,-643,409
+  -661,-816,-575
+  390,-675,-793
+  423,-701,434
+  -345,-311,381
+  459,-707,401
+  -485,-357,347
+  """
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    Code.eval_string(<<"{", line::binary, "}">>) |> elem(0)
+  end)
+
+list_b =
+  """
+  -686,422,578
+  605,423,415
+  515,917,-361
+  -336,658,858
+  -476,619,847
+  -460,603,-452
+  729,430,532
+  -322,571,750
+  -355,545,-477
+  413,935,-424
+  -391,539,-444
+  553,889,-390
+  """
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    Code.eval_string(<<"{", line::binary, "}">>) |> elem(0)
+  end)
+
+Enum.zip(list_a, list_b)
+|> Enum.map(fn {{a_x, a_y, a_z}, b} ->
+  Scanners.all_orientations(b)
+  |> Enum.reduce([], fn
+    {b_x, b_y, b_z}, acc -> [{b_x - a_x, b_y - a_y, b_z - a_z} | acc]
+  end)
+  |> Enum.sort()
+end)
+|> Enum.flat_map(& &1)
+|> Enum.sort()
+|> Enum.chunk_by(& &1)
+|> Enum.filter(&(length(&1) > 1))
+```
+
+```elixir
+all_variants = Scanners.all_orientations({1, 2, 3})
+
+id = Matrix.ident(3)
+rotate_z = [[0, 1, 0], [-1, 0, 0], [0, 0, 1]]
+rotate_x = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
+rotate_y = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]
+rotate_ny = Matrix.mult(Matrix.mult(rotate_y, rotate_y), rotate_y)
+
+all_variants_mx =
+  [
+    {Scanners.mult({1, 2, 3}, rotate_y), rotate_y},
+    {Scanners.mult({1, 2, 3}, rotate_ny), rotate_ny}
+    | 1..3
+      |> Enum.reduce([{{1, 2, 3}, id}], fn _, [{vec, matrix} | _] = acc ->
+        [{Scanners.mult(vec, rotate_z), Matrix.mult(rotate_z, matrix)} | acc]
+      end)
+  ]
+  |> Enum.flat_map(fn {vec, matrix} ->
+    1..3
+    |> Enum.reduce([{vec, matrix}], fn _, [{vec, matrix} | _] = acc ->
+      [{Scanners.mult(vec, rotate_x), Matrix.mult(rotate_x, matrix)} | acc]
+    end)
+  end)
+
+all_variants -- Enum.map(all_variants_mx, &elem(&1, 0))
+
+all_variants_mx
+|> Enum.map(fn {vec, matrix} ->
+  {vec, Scanners.mult({1, 2, 3}, matrix), Scanners.mult(vec, Matrix.transpose(matrix)), matrix}
+end)
+
+# Scanners.all_orientations_mx({1,2,3})
+# Matrix.mult(id, rotate_z)
+# {1,2,3}
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+# |> Scanners.mult(rotate_z)
+# |> IO.inspect()
+
+# normalized -- all_variants
+
+# test = [[0, 1, 0], [1, 0, 0], [0, 0, -1]]
+# # Matrix.transpose(test) == test
+```

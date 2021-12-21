@@ -1,0 +1,162 @@
+# Untitled notebook
+
+## Section
+
+```elixir
+example = """
+5483143223
+2745854711
+5264556173
+6141336146
+6357385478
+4167524645
+2176841721
+6882881134
+4846848554
+5283751526
+"""
+
+input1 = """
+1443668646
+7686735716
+4261576231
+3361258654
+4852532611
+5587113732
+1224426757
+5155565133
+6488377862
+8267833811
+"""
+
+input = input1
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+pregrid =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line -> String.to_charlist(line) |> Enum.map(&(&1 - ?0)) end)
+
+dim = {width, height} = {length(pregrid), length(hd(pregrid))}
+```
+
+```elixir
+defmodule AOC do
+  def showgrid(grid, {width, height}) do
+    (height - 1)..0
+    |> Enum.reduce([], fn y, acc ->
+      [
+        (width - 1)..0
+        |> Enum.reduce([], fn x, acc ->
+          case grid[{x, y}] do
+            0 -> [?* | acc]
+            n -> [?0 + n | acc]
+          end
+        end)
+        | acc
+      ]
+    end)
+    |> Enum.join("\n")
+  end
+
+  def inspectgrid(grid, dim) do
+    IO.puts(["\n", showgrid(grid, dim)])
+    grid
+  end
+
+  def step(grid) do
+    grid
+    |> Enum.map(fn {k, v} -> {k, v + 1} end)
+    |> Enum.into(%{})
+    |> flashall()
+  end
+
+  def flashall(grid) do
+    grid
+    |> Enum.filter(fn {_k, v} -> v > 9 end)
+    #    |> IO.inspect()
+    |> case do
+      [] ->
+        grid
+
+      flashers ->
+        flashers
+        |> Enum.reduce(grid, fn
+          {{x, y}, _v}, acc ->
+            for x1 <- (x - 1)..(x + 1), y1 <- (y - 1)..(y + 1) do
+              {x1, y1}
+            end
+            |> Enum.reduce(
+              Map.put(acc, {x, y}, 0),
+              fn pos, acc ->
+                case acc[pos] do
+                  0 -> acc
+                  nil -> acc
+                  n -> Map.put(acc, pos, n + 1)
+                end
+              end
+            )
+        end)
+        |> flashall()
+    end
+  end
+
+  def findsynchronized(grid) do
+    findsynchronized(grid, 0)
+  end
+
+  def findsynchronized(grid, step) do
+    {grid, step} = {AOC.step(grid), step + 1}
+
+    cond do
+      Enum.all?(grid, fn {_k, v} -> v == 0 end) -> step
+      true -> findsynchronized(grid, step)
+    end
+  end
+end
+
+grid =
+  pregrid
+  |> Enum.with_index()
+  |> Enum.reduce(%{}, fn {line, y}, acc ->
+    line
+    |> Enum.with_index()
+    |> Enum.reduce(acc, fn {col, x}, acc -> Map.put(acc, {x, y}, col) end)
+  end)
+
+# part1
+
+1..100
+|> Enum.reduce({grid, 0}, fn _, {grid, flashcount} ->
+  grid = AOC.step(grid)
+  {grid, flashcount + Enum.count(grid, fn {_k, v} -> v == 0 end)}
+end)
+|> elem(1)
+|> IO.inspect(label: "Part 1")
+
+# part2
+AOC.findsynchronized(grid)
+|> IO.inspect(label: "Part 2")
+
+AOC.inspectgrid(grid, dim)
+```
+
+```elixir
+%{:a => 1, :b => 2}
+|> Enum.map(fn {k, v} -> {k, v + 1} end)
+|> Enum.into(%{})
+
+for x <- 0..10, y <- 0..10, do: {x, y}
+
+{x, y} = {4, 8}
+
+for x1 <- (x - 1)..(x + 1), y1 <- (y - 1)..(y + 1) do
+  {x1, y1}
+end
+|> IO.inspect()
+
+# |> Enum.reduce(fn v,acc -> acc end)
+```

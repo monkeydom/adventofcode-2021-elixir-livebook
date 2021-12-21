@@ -1,0 +1,163 @@
+# Day 15
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+```elixir
+example = """
+1163751742
+1381373672
+2136511328
+3694931569
+7463417111
+1319128137
+1359912421
+3125421639
+1293138521
+2311944581
+"""
+
+input =
+  Kino.Input.read(input)
+  |> case do
+    "" -> example
+    lines -> lines
+  end
+
+riskmap =
+  for {line, y} <- String.split(input, "\n", trim: true) |> Enum.with_index(),
+      {c, x} <- String.to_charlist(line) |> Enum.with_index() do
+    {{x, y}, c - ?0}
+  end
+```
+
+```elixir
+defmodule Chiton do
+  def enlargen(maplist, factor) do
+    {w, h} =
+      maplist
+      |> Enum.reduce({0, 0}, fn {{x, y}, _}, {w, h} -> {max(x + 1, w), max(y + 1, h)} end)
+      |> IO.inspect(label: "size")
+
+    widelist =
+      1..(factor - 1)
+      |> Enum.reduce(maplist, fn pos, acc ->
+        maplist
+        |> Enum.reduce(acc, fn {{x, y}, v}, acc ->
+          [{{x + w * pos, y}, rem(v + pos - 1, 9) + 1} | acc]
+        end)
+      end)
+
+    1..(factor - 1)
+    |> Enum.reduce(widelist, fn pos, acc ->
+      widelist
+      |> Enum.reduce(acc, fn {{x, y}, v}, acc ->
+        [{{x, y + h * pos}, rem(v + pos - 1, 9) + 1} | acc]
+      end)
+    end)
+  end
+
+  def initial_pass(maplist) do
+    {map, order} =
+      maplist
+      |> Enum.sort_by(fn {{x, y}, _} -> x + y end)
+      |> Enum.reduce({%{}, []}, fn {{x, y} = p, r}, {map, list} ->
+        d =
+          case p do
+            {0, 0} ->
+              0
+
+            _ ->
+              [map[{x - 1, y}], map[{x, y - 1}]]
+              |> Enum.map(fn
+                nil -> 0xFFFFFFFF
+                {_r, d} -> d + r
+              end)
+              |> Enum.min()
+          end
+
+        {Map.put(map, p, {r, d}), [p | list]}
+      end)
+
+    {map, Enum.reverse(order)}
+  end
+
+  def step(map, order) do
+    order
+    |> Enum.reduce({map, 0}, fn {x, y} = p, {map, cc} ->
+      {r, d} = map[p]
+
+      newd =
+        [map[{x - 1, y}], map[{x, y - 1}], map[{x + 1, y}], map[{x, y + 1}]]
+        |> Enum.map(fn
+          nil -> 0xFFFFFFFF
+          {_r, d} -> d + r
+        end)
+        #          |> IO.inspect(label: "candidates")
+        |> Enum.min()
+
+      {newd, cc} =
+        if newd < d do
+          # IO.inspect({p, {d,newd}}, label: "Smaller: ")
+          {newd, cc + 1}
+        else
+          {d, cc}
+        end
+
+      {Map.put(map, p, {r, newd}), cc}
+    end)
+  end
+
+  def allsteps(map, order) do
+    target = List.last(order)
+
+    Stream.iterate(1, &(&1 + 1))
+    |> Enum.reduce_while(map, fn n, map ->
+      :io.format("step ~p ~p \n", [n, {target, map[target]}])
+
+      case step(map, order) do
+        {map, 0} ->
+          {:halt, map}
+
+        {map, n} ->
+          IO.inspect({n}, label: "Reductions")
+          {:cont, map}
+      end
+    end)
+  end
+end
+
+{map, order} = Chiton.initial_pass(riskmap)
+
+target = List.last(order)
+
+reduced = Chiton.allsteps(map, order)
+
+reduced[target]
+|> IO.inspect(label: "Part 1")
+```
+
+```elixir
+largemap = Chiton.enlargen(riskmap, 5)
+
+{map, order} = Chiton.initial_pass(largemap)
+target = List.last(order)
+reduced = Chiton.allsteps(map, order)
+
+reduced[target]
+|> IO.inspect(label: "Part 2")
+```
+
+```elixir
+rem(12 - 1, 9) + 1
+```

@@ -127,45 +127,122 @@ grid =
     |> Enum.map(fn c -> c - ?0 end)
   end)
 
-width =
-  length(hd(grid))
-  |> IO.inspect(label: "width")
+width = length(hd(grid))
 
-height =
-  length(grid)
-  |> IO.inspect(label: "height")
+height = length(grid)
+
+dim =
+  {width, height}
+  |> IO.inspect(label: "dim")
 
 map =
-  grid
-  |> Enum.with_index()
-  |> Enum.reduce(%{}, fn {line, y}, acc ->
-    line
-    |> Enum.with_index()
-    |> Enum.reduce(acc, fn {v, x}, acc ->
-      Map.put(acc, {x, y}, v)
+  for {line, y} <- Enum.with_index(grid),
+      {value, x} <- Enum.with_index(line),
+      into: Map.new() do
+    {{x, y}, value}
+  end
+
+sinks =
+  0..(width - 1)
+  |> Enum.reduce([], fn x, acc ->
+    0..(height - 1)
+    |> Enum.reduce(acc, fn y, acc ->
+      pos = {x, y}
+      candidate = map[pos]
+
+      [{x - 1, y}, {x, y - 1}, {x + 1, y}, {x, y + 1}]
+      |> Enum.all?(&(map[&1] > candidate))
+      |> case do
+        true -> [{pos, candidate} | acc]
+        _ -> acc
+      end
     end)
   end)
 
-0..(width - 1)
-|> Enum.reduce([], fn x, acc ->
-  0..(height - 1)
-  |> Enum.reduce(acc, fn y, acc ->
-    candidate = map[{x, y}]
-
-    [{x - 1, y}, {x, y - 1}, {x + 1, y}, {x, y + 1}]
-    |> Enum.map(fn pos ->
-      #      IO.inspect(pos)
-      map[pos]
-    end)
-    |> Enum.min()
-    |> case do
-      value when value > candidate -> [candidate | acc]
-      _ -> acc
-    end
-  end)
-end)
-|> Enum.map(fn height -> height + 1 end)
+sinks
+|> Enum.map(fn {{_x, _y}, height} -> height + 1 end)
 |> Enum.sum()
+|> IO.inspect(label: "Part 1")
+
+defmodule AOC do
+  def basins(sinks, map) do
+    sinks
+    |> Enum.map(fn {pos, _} -> basin(pos, map) end)
+  end
+
+  def basin(pos, map) do
+    basin(MapSet.new(), pos, map)
+  end
+
+  defp basin(set, pos = {x, y}, map) do
+    if pos in set or map[pos] in [nil, 9] do
+      set
+    else
+      MapSet.put(set, pos)
+      |> basin({x - 1, y}, map)
+      |> basin({x + 1, y}, map)
+      |> basin({x, y + 1}, map)
+      |> basin({x, y - 1}, map)
+    end
+  end
+end
+
+sinks
+|> AOC.basins(map)
+|> Enum.map(&MapSet.size/1)
+|> Enum.sort(:desc)
+|> Enum.take(3)
+|> Enum.product()
+|> IO.inspect(label: "Part 2")
+```
+
+```elixir
+defmodule AOC do
+  def allbasins(map, dim = {_w,_h}) do
+    {map, pairs} = painted_map(map, dim)
+
+    map
+    |> Enum.filter(fn {_k,v} -> is_tuple(v) end)
+    |> Enum.frequencies_by(fn {_k,v} -> v end)
+  end
+
+  def painted_map(map, {w,h}) do
+    map =
+    for x <- 0..w-1, y <- 0..h-1 do {x,y} end
+    |> Enum.reduce(map, fn {x,y},map ->
+      case map[{x,y}] do
+        9 -> map
+        _ -> 
+          [{x-1,y},{x,y-1}]
+          |> Enum.find(fn r = {_,_} -> r end)
+          |> case do
+            nil -> {x,y}
+            pos -> pos
+          end 
+          |> (&(Map.put(map, {x,y}, &1))).()
+        end
+    end)
+
+    pairs =
+    for x <- 0..w-1, y <- 0..h-1 do {x,y} end
+    |> Enum.reduce(%{}, fn {x,y},pairs ->
+      case map[{x,y}] do
+        9 -> map
+        {px,py} ->
+          [{x-1,y},{x,y-1}]
+          |> Enum.find(fn r = {_,_} -> r end)
+          |> case do
+            nil -> {x,y}
+            pos -> pos
+          end 
+          |> (&(Map.put(map, {x,y}, &1))).()
+        end
+
+    {map,pairs}    
+  end
+end
+
+AOC.allbasins(map, dim)
 ```
 
 ```elixir
@@ -174,4 +251,7 @@ end)
 
 -1..1//2
 |> Enum.to_list()
+
+2
+|> (&Map.put(%{}, :key, &1)).()
 ```
