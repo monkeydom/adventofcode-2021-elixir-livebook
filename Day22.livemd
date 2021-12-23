@@ -1,0 +1,107 @@
+# Day 22
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+example = """
+on x=10..12,y=10..12,z=10..12
+on x=11..13,y=11..13,z=11..13
+off x=9..11,y=9..11,z=9..11
+on x=10..10,y=10..10,z=10..10
+"""
+
+input =
+  Kino.Input.read(input)
+  |> case do
+    "" -> example
+    input -> input
+  end
+  |> String.split("\n", trim: true)
+```
+
+## Part 1
+
+```elixir
+defmodule Reboot do
+  def reboot(input) do
+    for line <- input,
+        [action, ranges] = String.split(line, " ", trim: true),
+        reduce: MapSet.new() do
+      state ->
+        {x_range, y_range, z_range} = Code.eval_string(<<"{", ranges::binary, "}">>) |> elem(0)
+
+        map_fun =
+          if action == "on" do
+            &MapSet.put/2
+          else
+            &MapSet.delete/2
+          end
+          |> tap(&IO.inspect({line, &1}))
+
+        for x <- -50..50,
+            x in x_range,
+            y <- -50..50,
+            y in y_range,
+            z <- -50..50,
+            z in z_range,
+            reduce: state do
+          state ->
+            map_fun.(state, {x, y, z})
+        end
+    end
+    |> Enum.count()
+  end
+end
+
+Reboot.reboot(input)
+```
+
+## Part 2
+
+```elixir
+defmodule Cube do
+  def reboot(input) do
+    parsed = 
+    for line <- input,
+        [action, ranges] = String.split(line, " ", trim: true) do
+      {Code.eval_string(<<"{", ranges::binary, "}">>) |> elem(0), action}
+    end
+    reboot(parsed, [])
+  end
+
+  def reboot([],state), do: state
+  def reboot([{ranges, "on"} | intail], state) do
+    reboot(intail, incorporate_on(ranges, state))
+  end
+
+  def incorporate_on(ranges, state), do: incorporate_on([ranges], [], state, [])
+  def incorporate_on([], rangewalked, [], walked), do: Enum.reverse(rangewalked ++ walked)
+  def incorporate_on([], rangewalked, [on | ontail], walked), do 
+    incorporate_on(rangewalked, [], ontail, [ on | walked])
+  end
+  def incorporate_on([ranges | rangetail], ragewalked, on)
+    incorporate_on(rangelist, tail, [ on | walked])
+  end
+end
+
+Cube.reboot(input |> Enum.take(2))
+```
+
+## Playground
+
+```elixir
+
+```
