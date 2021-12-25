@@ -1,0 +1,160 @@
+# Day 23
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+example = """
+8
+500
+5000
+5
+300
+20
+500
+30
+40
+9000
+3
+8
+"""
+
+# 15414 - too high
+# []] too low
+
+# lower bound: 
+# D 14000
+# C  1100   1300 (because D and C must swap)
+# B    90
+# A    16
+#   15206  15410 
+
+lines =
+  Kino.Input.read(input)
+  |> case do
+    "" -> example
+    input -> input
+  end
+  |> String.split("\n", trim: true)
+  |> Enum.map(&String.to_integer/1)
+  |> Enum.sum()
+```
+
+## Part 1
+
+```elixir
+state = [[[1, 3], [1, 2], [3, 0], [0, 2]], [nil, nil, nil, nil, nil, nil, nil]]
+
+defmodule Game do
+  def possible_moves([arms, hall]) do
+    arm_moves =
+      arms
+      |> Enum.with_index()
+      |> Enum.reduce([], fn {arm, ai}, acc ->
+        case arm do
+          [a] when a != ai ->
+            add_arm_moves({a, ai}, [arms, hall], acc)
+
+          [a, b] when a != ai or b != ai ->
+            add_arm_moves({a, ai}, [arms, hall], acc)
+
+          _ ->
+            acc
+        end
+      end)
+
+    hall_moves =
+      hall
+      |> Enum.with_index()
+      |> Enum.reduce([], fn
+        {nil, i}, acc ->
+          acc
+
+        {v, i}, acc ->
+          arm = Enum.at(arms, v)
+
+          if Enum.all?(arm, fn e -> e == v end) do
+            new_arms = List.update_at(arms, v, fn arm -> [v | arm] end)
+            new_hall = List.update_at(hall, i, fn _ -> nil end)
+            [[new_arms, new_hall] | acc]
+          else
+            acc
+          end
+      end)
+
+    [hall_moves] ++ arm_moves
+  end
+
+  def add_arm_moves({v, index}, [arms, hall], acc) do
+    new_arms = List.update_at(arms, index, &tl/1)
+    {left, right} = Enum.split(hall, index + 2)
+
+    new_lefts =
+      add_possible_hall_positions(v, Enum.reverse(left))
+      |> Enum.map(&[new_arms, &1 ++ right])
+
+    new_rights =
+      add_possible_hall_positions(v, right)
+      |> Enum.map(&[new_arms, left ++ Enum.reverse(&1)])
+
+    [new_lefts ++ new_rights | acc]
+  end
+
+  def add_possible_hall_positions(v, list) do
+    add_possible_hall_positions(v, list, [])
+  end
+
+  def add_possible_hall_positions(v, [nil | tail], walked) do
+    add_possible_hall_positions(v, tail, [nil | walked])
+  end
+
+  def add_possible_hall_positions(v, list, walked) do
+    walked
+    |> Enum.with_index()
+    |> Enum.reduce(
+      [],
+      fn {_, i}, acc -> [Enum.reverse(list) ++ List.replace_at(walked, i, v) | acc] end
+    )
+  end
+end
+
+state = [[[1, 3], [1, 2], [0], []], [nil, nil, nil, 3, 0, 2, nil]]
+
+Game.possible_moves(state)
+|> Enum.flat_map(& &1)
+|> Enum.flat_map(&Game.possible_moves/1)
+|> Enum.flat_map(& &1)
+|> Enum.flat_map(&Game.possible_moves/1)
+|> Enum.flat_map(& &1)
+
+# |> Enum.flat_map(&Game.possible_moves/1)
+# |> Enum.flat_map(& &1)
+```
+
+## Part 2
+
+```elixir
+[]
+|> Enum.reduce([], fn a, acc -> acc end)
+
+[2]
+|> Enum.all?(fn e -> e == 0 end)
+```
+
+## Playground
+
+```elixir
+
+```

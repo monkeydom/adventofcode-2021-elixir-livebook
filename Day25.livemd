@@ -1,0 +1,118 @@
+# Day 25
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+example = """
+v...>>.vv>
+.vv>>.vv..
+>>.>v>...v
+>>v>>.>.v.
+v>v.vv.v..
+>.>>..v...
+.vv..>.>v.
+v.v..>>v.v
+....v..v.>
+"""
+
+lines =
+  Kino.Input.read(input)
+  |> case do
+    #    _ -> example3
+    "" -> example
+    input -> input
+  end
+  |> String.split("\n", trim: true)
+  |> Enum.map(&String.to_charlist/1)
+```
+
+## Part 1
+
+```elixir
+defmodule Cucumbers do
+  def from_charlists(lists) do
+    dim = {length(hd(lists)), length(lists)}
+
+    for {line, y} <- Enum.with_index(lists),
+        {char, x} <- Enum.with_index(line),
+        reduce: Map.new() do
+      map ->
+        case char do
+          char when char in '>v' ->
+            Map.put(map, {x, y}, <<char>>)
+
+          _ ->
+            map
+        end
+    end
+    |> then(&{dim, &1})
+  end
+
+  def step({{xmod, ymod} = dim, map}) do
+    map
+    |> step(">", fn {x, y} -> {rem(x + 1, xmod), y} end)
+    |> step("v", fn {x, y} -> {x, rem(y + 1, ymod)} end)
+    |> then(&{dim, &1})
+  end
+
+  def step(map, type, targetfun) do
+    map
+    |> Enum.reduce(map, fn
+      {pos, ^type}, acc ->
+        target_pos = targetfun.(pos)
+        #        IO.inspect({pos, map[pos], target_pos, map[target_pos]}, label: "move?")
+
+        if map[target_pos] == nil do
+          #          IO.inspect({pos, type}, label: "moved")
+
+          acc
+          |> Map.delete(pos)
+          |> Map.put(target_pos, type)
+        else
+          acc
+        end
+
+      _, acc ->
+        acc
+    end)
+  end
+
+  def step_until_stuck(ccmap) do
+    Stream.iterate(1, &(&1 + 1))
+    |> Enum.reduce_while(ccmap, fn n, acc ->
+      case step(acc) do
+        ^acc -> {:halt, {n, acc}}
+        acc -> {:cont, acc}
+      end
+    end)
+  end
+end
+
+Cucumbers.from_charlists(lines)
+|> Cucumbers.step_until_stuck()
+```
+
+## Part 2
+
+```elixir
+
+```
+
+## Playground
+
+```elixir
+
+```

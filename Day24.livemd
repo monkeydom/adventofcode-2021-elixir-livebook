@@ -1,0 +1,155 @@
+# Day 24
+
+## Setup
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.4.1"},
+  {:vega_lite, "~> 0.1.1"}
+])
+```
+
+```elixir
+input = Kino.Input.textarea("Input:")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+example = """
+inp x
+mul x -1
+"""
+
+example2 = """
+inp z
+inp x
+mul z 3
+eql z x
+"""
+
+example3 = """
+inp w
+add z w
+mod z 2
+div w 2
+add y w
+mod y 2
+div w 2
+add x w
+mod x 2
+div w 2
+mod w 2
+"""
+
+# 15414 - too high
+# []] too low
+
+# lower bound: 
+# D 14000
+# C  1100   1300 (because D and C must swap)
+# B    90
+# A    16
+#   15206  15410 
+
+lines =
+  Kino.Input.read(input)
+  |> case do
+    #    _ -> example3
+    "" -> example
+    input -> input
+  end
+  |> String.split("\n", trim: true)
+```
+
+## Part 1
+
+```elixir
+defmodule Alu do
+  def new(input \\ [9, 27, 7, 6, 5, 4, 3, 2, 1]) do
+    %{
+      "w" => 0,
+      "x" => 0,
+      "y" => 0,
+      "z" => 0,
+      :input => input
+    }
+  end
+
+  def execute(state, instruction)
+
+  def execute(state, <<"inp ", var::binary>>) do
+    Map.put(state, var, hd(state[:input]))
+    |> Map.update(:input, [], &tl/1)
+  end
+
+  def execute(state, <<ins::3-binary, " ", dest::1-binary, " ", b::binary>>) do
+    b = direct_or_operand(state, b)
+    a = state[dest]
+
+    result =
+      case ins do
+        "add" ->
+          a + b
+
+        "mul" ->
+          a * b
+
+        "div" ->
+          trunc(a / b)
+
+        "mod" ->
+          rem(a, b)
+
+        "eql" ->
+          if a == b do
+            1
+          else
+            0
+          end
+      end
+
+    Map.put(state, dest, result)
+    #    |> IO.inspect()
+  end
+
+  def direct_or_operand(state, b) when b in ["w", "x", "y", "z"] do
+    state[b]
+  end
+
+  def direct_or_operand(_, b), do: String.to_integer(b)
+
+  def eval(program, input \\ [9, 27, 8, 7, 6]) do
+    program
+    |> Enum.reduce(Alu.new(input), fn instruction, state -> Alu.execute(state, instruction) end)
+  end
+end
+
+Alu.eval(lines, [1, 3, 5, 7, 9, 2, 4, 6, 8, 9, 9, 9, 9, 9])
+
+Stream.iterate(99_999_999_999_999, &(&1 - 1))
+|> Stream.map(&Integer.digits/1)
+|> Stream.reject(fn list -> Enum.any?(list, &(&1 == 0)) end)
+|> Enum.reduce_while(nil, fn input, _ ->
+  case Alu.eval(lines, input)["z"] do
+    0 -> {:halt, input, Integer.undigits(input)}
+    _ -> {:cont, nil}
+  end
+end)
+```
+
+## Part 2
+
+```elixir
+[]
+|> Enum.reduce([], fn a, acc -> acc end)
+
+[2]
+|> Enum.all?(fn e -> e == 0 end)
+```
+
+## Playground
+
+```elixir
+Integer.digits(123)
+```
