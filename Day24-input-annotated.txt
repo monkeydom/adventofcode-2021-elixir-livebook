@@ -1,0 +1,265 @@
+inp w       w = i[0] ------- 0
+mul x 0     x = 0
+add x z     x = x + z (0) = 0 
+mod x 26    x = x + 26 = 26
+div z 1     z = trunc(0 / 1) = 0
+add x 15	x = x + 15 = 26 + 15 = 31
+eql x w     x = i[0] == 31 ? 1 : 0 = 0
+eql x 0     x = x == 0 ? 1 : 0 = 1
+mul y 0     y = 0
+add y 25    y = 25
+mul y x     y = y * x = y = 25
+add y 1     y = y + 1 = 26
+mul z y     z = z * y = 0 * 26 = 0
+mul y 0     y = 0
+add y w     y = 0 + i[0] = i[0]
+add y 13    y = y + 13 = i[0] + 13
+mul y x     y = y * x = (i[0] + 13) * 1 = i[0] + 13
+add z y     z = i[0] + 13
+
+inp w       ------- 1
+mul x 0
+add x z
+mod x 26    x = z % 26
+div z 1     
+add x 10    x = (z % 26) + 10
+eql x w     x = x == i[1] ? 1 : 0
+eql x 0     x = x == 0 ? 1 : 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 16
+mul y x
+add z y
+
+inp w       ------- 2
+mul x 0
+add x z
+mod x 26
+div z 1
+add x 12
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 2
+mul y x
+add z y
+
+inp w       ------- 3
+mul x 0
+add x z
+mod x 26
+div z 1
+add x 10
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 8
+mul y x
+add z y
+
+inp w       ------- 4
+mul x 0
+add x z
+mod x 26
+div z 1
+add x 14
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 11
+mul y x
+add z y
+
+inp w       ------- 5
+mul x 0
+add x z
+mod x 26
+div z 26
+add x -11
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 6
+mul y x
+add z y
+
+inp w       ------- 6
+mul x 0
+add x z
+mod x 26
+div z 1
+add x 10
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 12
+mul y x
+add z y
+
+inp w       ------- 7
+mul x 0
+add x z
+mod x 26
+div z 26
+add x -16
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 2
+mul y x
+add z y
+
+inp w       ------- 8
+mul x 0
+add x z
+mod x 26
+div z 26
+add x -9
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 2
+mul y x
+add z y
+
+inp w       ------- 9
+mul x 0
+add x z
+mod x 26
+div z 1
+add x 11
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 15
+mul y x
+add z y
+
+inp w       -------10
+mul x 0
+add x z
+mod x 26
+div z 26
+add x -8
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 1
+mul y x
+add z y
+
+inp w       -------11
+mul x 0
+add x z
+mod x 26
+div z 26
+add x -8
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 10
+mul y x
+add z y
+
+inp w       -------12
+mul x 0
+add x z
+mod x 26
+div z 26
+add x -10
+eql x w
+eql x 0
+mul y 0
+add y 25
+mul y x
+add y 1
+mul z y
+mul y 0
+add y w
+add y 14
+mul y x
+add z y
+
+inp w       -------13
+mul x 0
+add x z
+mod x 26    x = z % 26
+div z 26    z = trunc(z / 26)
+add x -9    x = x - 9
+eql x w     
+eql x 0     x = x == w ? 0 : 1
+mul y 0     
+add y 25
+mul y x
+add y 1     y = 25 * x + 1
+mul z y     z = z * y
+mul y 0
+add y w
+add y 10
+mul y x     y = (i[13] + 10) * x
+add z y     z = z + y    ---- only works if this is zero
