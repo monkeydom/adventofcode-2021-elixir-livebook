@@ -55,10 +55,13 @@ lines =
 ## Part 1
 
 ```elixir
-state = {[[[1, 3], [1, 2], [3, 0], [0, 2]], [nil, nil, nil, nil, nil, nil, nil]], []}
+# input
+state = {[[[1, 3], [1, 2], [3, 0], [0, 2]], [nil, nil, nil, nil, nil, nil, nil]], [{0, 0}]}
+# 15412
 
 # Example 
-state = {[[[1, 0], [2, 3], [1, 2], [3, 0]], [nil, nil, nil, nil, nil, nil, nil]], []}
+state = {[[[1, 0], [2, 3], [1, 2], [3, 0]], [nil, nil, nil, nil, nil, nil, nil]], [{0, 0}]}
+# 12521
 
 defmodule Game do
   def possible_moves({[arms, hall], movelist}) do
@@ -251,16 +254,16 @@ defmodule Game do
   def is_win?({[_arms, _hall], _movelist}), do: false
 
   def all_wins(state) do
-    iterate([state], [], [], 99_999_999_999_999)
+    iterate([state], [], [], 0, 99_999_999_999_999)
   end
 
-  def iterate([], winacc, _stack, best), do: {winacc, best}
+  def iterate([], winacc, _stack, _ce, best), do: {winacc, best}
 
-  def iterate([state | state_tail], winacc, stack, best) do
-    energy_taken = energy(elem(state, 1))
+  def iterate([state | state_tail], winacc, stack, ce, best) do
+    energy_taken = ce + moveenergy(hd(elem(state, 1)))
 
     if energy_taken > best do
-      iterate(state_tail, winacc, stack, best)
+      iterate(state_tail, winacc, stack, ce, best)
     else
       {new_win, new_best} =
         if is_win?(state) do
@@ -282,11 +285,16 @@ defmodule Game do
           end
         else
           possible_moves(state)
-          |> Enum.sort_by(&Game.energy(elem(&1, 1)), :asc)
-          |> iterate(winacc, [state | stack], best)
+          #          |> Enum.shuffle()
+          #           |> Enum.sort_by(&moveenergy(hd(elem(&1, 1))), :asc)
+          |> iterate(winacc, [state | stack], energy_taken, best)
         end
 
-      iterate(state_tail, new_win, stack, new_best)
+      if new_best < ce do
+        {winacc, new_best}
+      else
+        iterate(state_tail, new_win, stack, ce, new_best)
+      end
     end
   end
 end
@@ -294,7 +302,7 @@ end
 # state = {[[[0, 0], [3], [2], [3]], [2, 1, 1, nil, nil, nil, nil]], []}
 
 # state = {[[[0], [1, 1], [2, 2], []], [nil, nil, nil, 3, 3, 0, nil]], []}
-# state = {[[[0], [1, 1], [2, 2], [3, 0]], [nil, nil, nil, 3, nil, nil, nil]], []}
+# state = {[[[0], [1, 1], [2, 2], [3, 0]], [nil, nil, nil, 3, nil, nil, nil]], [{0,0}]}
 
 Game.inspect(state)
 
@@ -305,8 +313,11 @@ Game.inspect(state)
 IO.inspect(best, label: "Best Energy")
 
 all_wins
-|> Enum.sort_by(&Game.energy(elem(&1, 1)), :asc)
-|> tap(fn list -> list |> Enum.take(20) |> Enum.each(&Game.inspect(&1)) end)
+|> Enum.reverse()
+# |> Enum.sort_by(&Game.energy(elem(&1, 1)), :asc)
+|> tap(fn list -> list |> Enum.take(1) |> Enum.each(&Game.inspect(&1)) end)
+
+{best, all_wins}
 
 # Game.possible_moves(state)
 # # |> Enum.flat_map(& &1)
@@ -325,11 +336,291 @@ all_wins
 ## Part 2
 
 ```elixir
-[]
-|> Enum.reduce([], fn a, acc -> acc end)
+# input
+state =
+  {[
+     [[1, 3, 3, 3], [1, 2, 1, 2], [3, 1, 0, 0], [0, 0, 2, 2]],
+     [nil, nil, nil, nil, nil, nil, nil]
+   ], [{0, 0}]}
 
-[2]
-|> Enum.all?(fn e -> e == 0 end)
+# 15412
+# 58358 is too high
+
+# Example 
+# state = {[[[1,3,3,0], [2,2,1, 3], [1,1,0, 2], [3,0,2,0]], [nil, nil, nil, nil, nil, nil, nil]], [{0, 0}]}
+# 12521
+
+defmodule Game do
+  def possible_moves({[arms, hall], movelist}) do
+    arm_moves =
+      arms
+      |> Enum.with_index()
+      |> Enum.reduce([], fn {arm, ai}, acc ->
+        case arm do
+          [a] when a != ai ->
+            add_arm_moves({a, ai}, [arms, hall], acc, movelist)
+
+          [a, b] when a != ai or b != ai ->
+            add_arm_moves({a, ai}, [arms, hall], acc, movelist)
+
+          [a, b, c] when a != ai or b != ai or c != ai ->
+            add_arm_moves({a, ai}, [arms, hall], acc, movelist)
+
+          [a, b, c, d] when a != ai or b != ai or c != ai or d != ai ->
+            add_arm_moves({a, ai}, [arms, hall], acc, movelist)
+
+          _ ->
+            acc
+        end
+      end)
+
+    hall_moves =
+      hall
+      |> Enum.with_index()
+      |> Enum.reduce([], fn
+        {nil, _i}, acc ->
+          acc
+
+        {v, i}, acc ->
+          arm = Enum.at(arms, v)
+
+          if Enum.all?(arm, fn e -> e == v end) and way_clear(hall, i, v) do
+            new_arms = List.update_at(arms, v, fn arm -> [v | arm] end)
+            new_hall = List.update_at(hall, i, fn _ -> nil end)
+            [{[new_arms, new_hall], [{v, distance_to_arm(i, v, arms)} | movelist]} | acc]
+          else
+            acc
+          end
+      end)
+
+    hall_moves ++ arm_moves
+  end
+
+  def way_clear(hall, from_index, target_arm_value, from_hall \\ 1) do
+    target_index = to_full_hall_arm_index(target_arm_value)
+    from_index_full = to_full_hall_index(from_index)
+    fullhall = full_hall(hall)
+
+    if abs(target_index - from_index_full) <= from_hall do
+      true
+    else
+      slice_range =
+        if from_index_full > target_index do
+          target_index..(from_index_full - from_hall)
+        else
+          (from_index_full + from_hall)..target_index
+        end
+
+      fullhall
+      |> Enum.slice(slice_range)
+      #      |> IO.inspect(label: "Slice")
+      |> Enum.all?(&(&1 == nil))
+    end
+  end
+
+  def to_full_hall_index(i) do
+    case i do
+      6 -> 10
+      5 -> 9
+      4 -> 7
+      3 -> 5
+      2 -> 3
+      i -> i
+    end
+  end
+
+  def to_full_hall_arm_index(i), do: i * 2 + 2
+
+  def distance_to_arm(hall_index, arm_index, arms, depth \\ 4) do
+    depth - length(Enum.at(arms, arm_index)) +
+      abs(to_full_hall_index(hall_index) - to_full_hall_arm_index(arm_index))
+  end
+
+  def add_arm_moves({v, arm_index}, [arms, hall], acc, movelist) do
+    new_arms = List.update_at(arms, arm_index, &tl/1)
+
+    0..(length(hall) - 1)
+    |> Enum.reduce(acc, fn hall_index, acc ->
+      if way_clear(hall, hall_index, arm_index, 0) do
+        [
+          {[new_arms, List.replace_at(hall, hall_index, v)],
+           [{v, distance_to_arm(hall_index, arm_index, new_arms)} | movelist]}
+          | acc
+        ]
+      else
+        acc
+      end
+    end)
+  end
+
+  def add_possible_hall_positions(v, list) do
+    add_possible_hall_positions(v, list, [])
+  end
+
+  def add_possible_hall_positions(v, [nil | tail], walked) do
+    add_possible_hall_positions(v, tail, [nil | walked])
+  end
+
+  def add_possible_hall_positions(v, list, walked) do
+    walked
+    |> Enum.with_index()
+    |> Enum.reduce(
+      [],
+      fn {_, i}, acc -> [Enum.reverse(list) ++ List.replace_at(walked, i, v) | acc] end
+    )
+  end
+
+  def full_hall([la2, la1, ab, bc, cd, rd1, rd2]),
+    do: [la2, la1, nil, ab, nil, bc, nil, cd, nil, rd1, rd2]
+
+  def to_string([arms, hall], depth \\ 4) do
+    hall_line =
+      hall
+      |> full_hall()
+      |> Enum.map(fn
+        nil -> ?.
+        n -> n + ?A
+      end)
+
+    arm_lines =
+      depth..1
+      |> Enum.reduce([], fn ln, acc ->
+        arms
+        |> Enum.map(fn arm ->
+          cond do
+            length(arm) < ln -> ?.
+            true -> :lists.nth(length(arm) - ln + 1, arm) + ?A
+          end
+        end)
+        |> Enum.intersperse(' ')
+        |> then(&['  ' ++ &1 ++ '  ' | acc])
+      end)
+      |> Enum.reverse()
+
+    [hall_line | arm_lines] |> Enum.join("\n")
+  end
+
+  def inspect(_, depth \\ 4)
+
+  def inspect({state, movelist}, depth) do
+    IO.puts([Game.to_string(state, depth)])
+    energy = energy(movelist)
+
+    IO.puts([
+      Integer.to_charlist(energy),
+      " Energy in ",
+      Integer.to_charlist(length(movelist)),
+      " Moves",
+      "\n"
+    ])
+  end
+
+  def energy(movelist) do
+    energy(movelist, 0)
+  end
+
+  defp energy([], acc), do: acc
+  defp energy([head | tail], acc), do: energy(tail, acc + moveenergy(head))
+  defp moveenergy({0, d}), do: d
+  defp moveenergy({1, d}), do: d * 10
+  defp moveenergy({2, d}), do: d * 100
+  defp moveenergy({3, d}), do: d * 1000
+
+  def is_win?({[arms, [nil, nil, nil, nil, nil, nil, nil]], _movelist}) do
+    arms
+    |> Enum.with_index()
+    |> Enum.reduce_while(true, fn
+      _, false ->
+        {:halt, false}
+
+      {arm, arm_index}, true ->
+        {:cont, Enum.all?(arm, &(&1 == arm_index))}
+    end)
+  end
+
+  def is_win?({[_arms, _hall], _movelist}), do: false
+
+  def all_wins(state) do
+    iterate([state], [], [], 0, 99_999_999_999_999)
+  end
+
+  def iterate([], winacc, _stack, _ce, best), do: {winacc, best}
+
+  def iterate([state | state_tail], winacc, stack, ce, best) do
+    energy_taken = ce + moveenergy(hd(elem(state, 1)))
+
+    if energy_taken >= best do
+      # IO.inspect({energy_taken, ">", best}, label: "Shortcut Expensive")
+      iterate(state_tail, winacc, stack, ce, best)
+    else
+      {new_win, new_best} =
+        if is_win?(state) do
+          if energy_taken < best do
+            IO.inspect({energy_taken, elem(state, 1)}, label: "Win")
+
+            stack
+            |> Enum.reverse()
+            |> Enum.with_index()
+            |> Enum.each(fn {state, index} ->
+              IO.inspect(index, label: "Step")
+              Game.inspect(state)
+            end)
+
+            Game.inspect(state)
+            {[state | winacc], energy_taken}
+          else
+            IO.inspect({energy_taken, ">=", best}, label: "Shortcut Win")
+            {winacc, best}
+          end
+        else
+          possible_moves(state)
+          #          |> Enum.shuffle()
+          |> Enum.sort_by(&moveenergy(hd(elem(&1, 1))), :asc)
+          |> iterate(winacc, [state | stack], energy_taken, best)
+        end
+
+      if new_best <= ce do
+        IO.inspect({ce, ">", new_best}, label: "Shortcut Outside")
+        {winacc, new_best}
+      else
+        iterate(state_tail, new_win, stack, ce, new_best)
+      end
+    end
+  end
+end
+
+# state = {[[[0, 0], [3], [2], [3]], [2, 1, 1, nil, nil, nil, nil]], []}
+
+# state = {[[[0], [1, 1], [2, 2], []], [nil, nil, nil, 3, 3, 0, nil]], []}
+# state = {[[[0], [1, 1], [2, 2], [3, 0]], [nil, nil, nil, 3, nil, nil, nil]], [{0,0}]}
+
+Game.inspect(state)
+
+# Game.possible_moves(state)
+# |> tap(fn list -> list |> Enum.each(&Game.inspect(&1)) end)
+
+{all_wins, best} = Game.all_wins(state)
+IO.inspect(best, label: "Best Energy")
+
+all_wins
+# |> Enum.reverse()
+# # |> Enum.sort_by(&Game.energy(elem(&1, 1)), :asc)
+# |> tap(fn list -> list |> Enum.take(1) |> Enum.each(&Game.inspect(&1)) end)
+
+# {best, all_wins}
+
+# Game.possible_moves(state)
+# # |> Enum.flat_map(& &1)
+# |> tap(fn list -> list |> Enum.each(&Game.inspect({&1, []})) end)
+# |> Enum.flat_map(&Game.possible_moves/1)
+# |> tap(fn list -> list |> Enum.each(&Game.inspect({&1, []})) end)
+
+# |> Enum.flat_map(& &1)
+# |> Enum.flat_map(&Game.possible_moves/1)
+# |> Enum.flat_map(& &1)
+
+# |> Enum.flat_map(&Game.possible_moves/1)
+# |> Enum.flat_map(& &1)
 ```
 
 ## Playground
